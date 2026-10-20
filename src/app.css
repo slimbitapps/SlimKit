@@ -1,0 +1,489 @@
+/* =====================================================================
+   SlimClick – eigene Teile. Grundsystem (Farben, Knöpfe, Dialoge) in base.css
+   ===================================================================== */
+
+/* Markenfarbe von SlimClick: Koralle → Pink (wie das Logo) */
+:root,
+:root[data-theme='dark'] {
+  --accent: #ff4d6d;
+  --accent-hover: #ff6482;
+  --accent-press: #e63e5d;
+  --accent-soft: rgba(255, 77, 109, 0.16);
+  --accent-line: rgba(255, 77, 109, 0.55);
+}
+:root[data-theme='light'] {
+  --accent: #e5294f;
+  --accent-hover: #d42045;
+  --accent-press: #bf1a3d;
+  --accent-soft: rgba(229, 41, 79, 0.09);
+  --accent-line: rgba(229, 41, 79, 0.45);
+}
+.btn.primary {
+  background: linear-gradient(135deg, #ff7a59, var(--accent));
+}
+.btn.primary:hover {
+  background: linear-gradient(135deg, #ff8a6d, var(--accent-hover));
+}
+
+.badge.success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.btn.danger {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- Startseite */
+.home {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 28px 32px;
+}
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 1.05fr) minmax(300px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card-title {
+  font-weight: 650;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  margin-bottom: 14px;
+  font-size: 13.5px;
+}
+.banner.warn {
+  background: var(--warn-soft);
+  color: var(--text);
+}
+.banner.warn > svg {
+  color: var(--warn);
+  flex: none;
+}
+
+/* Verbinden */
+.connect-card {
+  padding: 24px 26px 20px;
+  display: flex;
+  flex-direction: column;
+}
+.connect-card h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+}
+.connect-card.center {
+  align-items: center;
+  text-align: center;
+  padding: 40px 26px;
+  min-height: 420px;
+  justify-content: center;
+}
+.connect-card.center h2 {
+  margin: 14px 0 8px;
+}
+.qr-wrap {
+  display: grid;
+  place-items: center;
+  padding: 6px 0 4px;
+}
+.qr {
+  width: 260px;
+  height: 260px;
+  padding: 12px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line-2), var(--shadow);
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.steps {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.steps li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 550;
+}
+.steps .num,
+.howto li::marker {
+  color: var(--accent);
+}
+.steps .num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  font-weight: 700;
+  font-size: 12px;
+}
+.qr-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.qr-actions {
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.net-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.net-chip.hotspot,
+.net-chip.iphone-hotspot {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.trouble {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.stuck {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--warn-soft);
+  font-size: 13px;
+  animation: rise 0.4s var(--ease);
+}
+.stuck > svg {
+  color: var(--warn);
+  flex: none;
+}
+.big-ic {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.big-ic.ok {
+  background: var(--success-soft);
+  color: var(--success);
+  animation: pop 0.4s var(--ease);
+}
+.big-ic.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.client-list {
+  width: min(340px, 100%);
+  margin: 6px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.client {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  text-align: left;
+  font-weight: 600;
+}
+
+/* Status */
+.status-card .dot {
+  background: var(--text-3);
+}
+.status-card .dot.on {
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-soft);
+}
+.last-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+  transition: transform 0.2s var(--ease), background 0.3s;
+}
+.last-action.flash .pill {
+  transform: scale(1.08);
+  background: var(--accent);
+  color: #fff;
+}
+.howto {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-2);
+  display: grid;
+  gap: 4px;
+}
+
+/* Vorschau */
+.mini-preview {
+  aspect-ratio: 16 / 9;
+  max-height: 190px;
+  margin: 0 auto;
+  border-radius: 10px;
+  background: var(--stage);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 12px;
+  overflow: hidden;
+  position: relative;
+}
+.mini-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Timer */
+.seg.sm button {
+  height: 26px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+.timer-row {
+  margin: 6px 0 4px;
+}
+.timer-big {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.timer-big.warn {
+  color: var(--warn);
+}
+.timer-big.over {
+  color: var(--danger);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.chips button {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.chips button:hover {
+  border-color: var(--line-3);
+}
+.chips button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Testfolien */
+.demo-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.demo-ic,
+.perm-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- Einführung: Erlaubnisse */
+.perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+.perm-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1.5px solid var(--line-2);
+}
+.perm-card.ok {
+  border-color: var(--success);
+}
+.perm-t {
+  font-weight: 650;
+}
+
+/* ---------------------------------------------------------------- Hotspot-Anleitung */
+.hs-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  margin-bottom: 8px;
+}
+.hs-now.ok {
+  background: var(--success-soft);
+  color: var(--success);
+  font-weight: 600;
+}
+.hs-step {
+  margin-top: 18px;
+}
+.hs-step h3 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+.hs-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--text-2);
+}
+.hs-p {
+  margin: 0;
+  color: var(--text-2);
+}
+.hs-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.hs-note > svg {
+  flex: none;
+  color: var(--success);
+  margin-top: 2px;
+}
+.backdrop.top {
+  z-index: 80;
+}
+
+/* ---------------------------------------------------------------- Einstellungen */
+.how-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.how-list li {
+  display: flex;
+  gap: 8px;
+}
+.how-list svg {
+  color: var(--success);
+  flex: none;
+  margin-top: 2px;
+}
+.faq {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.faq-item button {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  font-weight: 620;
+}
+.faq-item p {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.faq-item.open {
+  border-color: var(--line-3);
+}
+
+@media (max-width: 960px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.side .card.pad {
+  padding: 16px 18px;
+}

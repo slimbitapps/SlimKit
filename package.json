@@ -1,0 +1,86 @@
+{
+  "name": "slimkit",
+  "version": "1.0.0",
+  "description": "The missing right-click tools for Finder & Explorer – copy folder structures, batch rename, resize images, send files to your phone via QR code",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "vite build && electron .",
+    "build": "vite build",
+    "typecheck": "tsc -p .",
+    "test": "node --test test/*.test.cjs",
+    "test:e2e": "vite build && node test/e2e/run.cjs",
+    "icons": "electron scripts/make-icons.cjs",
+    "dist:win": "vite build && electron-builder --win",
+    "dist:mac": "vite build && electron-builder --mac"
+  },
+  "author": "SlimBit Apps",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.56.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "zustand": "^5.0.15"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
+  },
+  "productName": "SlimKit",
+  "private": true,
+  "build": {
+    "appId": "app.slimbit.slimkit",
+    "productName": "SlimKit",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": ["dist/**", "electron/**", "package.json", "!**/*.map"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "SlimKit-Windows-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "SlimKit",
+      "installerLanguages": ["de_DE", "en_US"],
+      "multiLanguageInstaller": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh",
+      "artifactName": "SlimKit-Setup.${ext}"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "SlimKit lets your phone download and upload files over the local network.",
+        "LSUIElement": false
+      },
+      "artifactName": "SlimKit-Mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "SlimKit",
+      "background": "build/background.png",
+      "iconSize": 110,
+      "window": { "width": 660, "height": 420 },
+      "contents": [
+        { "x": 170, "y": 215, "type": "file" },
+        { "x": 490, "y": 215, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "compression": "maximum",
+    "electronLanguages": ["de", "en", "en-US", "en-GB"]
+  },
+  "repository": { "type": "git", "url": "https://github.com/slimbitapps/SlimKit.git" }
+}
