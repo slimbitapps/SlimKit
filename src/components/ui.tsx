@@ -1,38 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
 import { t } from '../i18n';
 import { IconClose } from '../icons';
+import logoUrl from '../assets/logo.svg';
 
-/**
- * App-Logo im SlimBit-Schema: abgerundetes Quadrat mit Farbverlauf, weißes Motiv.
- * SlimClick: Handy (hinten) + Folie mit Laserpunkt (vorne), Koralle → Pink.
- */
+/** App-Logo im SlimBit-Schema: abgerundetes Quadrat mit Farbverlauf, weißes Motiv (Ordner mit Menü-Zeilen). */
 export function Logo({ size = 28 }: { size?: number }) {
-  return (
-    <svg className="logo" width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <defs>
-        <linearGradient id="lc-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ff8a5c" />
-          <stop offset="1" stopColor="#ff3d77" />
-        </linearGradient>
-        <linearGradient id="lc-ink" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ffb199" />
-          <stop offset="1" stopColor="#ff7fa3" />
-        </linearGradient>
-        <radialGradient id="lc-glow">
-          <stop offset="0" stopColor="#ff2d55" stopOpacity="0.45" />
-          <stop offset="1" stopColor="#ff2d55" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect width="64" height="64" rx="14.4" fill="url(#lc-bg)" />
-      <rect x="10.3" y="13.4" width="15.6" height="29.4" rx="3.4" fill="#fff" opacity="0.36" transform="rotate(-12 18.1 28.1)" />
-      <rect x="18.75" y="21.6" width="33.75" height="23.1" rx="4.1" fill="#fff" />
-      <rect x="23.1" y="26.9" width="14.4" height="2.4" rx="1.2" fill="url(#lc-ink)" />
-      <rect x="23.1" y="31.1" width="10" height="1.75" rx="0.9" fill="url(#lc-ink)" opacity="0.55" />
-      <circle cx="43.1" cy="37.5" r="6.9" fill="url(#lc-glow)" />
-      <circle cx="43.1" cy="37.5" r="2.9" fill="#ff2d55" />
-      <circle cx="42.25" cy="36.6" r="0.95" fill="#fff" opacity="0.85" />
-    </svg>
-  );
+  return <img className="logo" src={logoUrl} width={size} height={size} alt="" draggable={false} />;
 }
 
 export function Switch({ on, onChange, label, testId }: { on: boolean; onChange: (v: boolean) => void; label?: string; testId?: string }) {

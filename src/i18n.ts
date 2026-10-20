@@ -1,25 +1,19 @@
 import type { Lang } from './types';
 import { de } from './locales/de';
 import { en } from './locales/en';
-import { fr } from './locales/fr';
-import { es } from './locales/es';
-import { it } from './locales/it';
 
 /** Alle Texte liegen in src/locales. Deutsch ist die Quelle aller Schlüssel. */
 export type TKey = keyof typeof de;
 export type Dict = Record<TKey, string>;
 
-const dicts: Record<Lang, Dict> = { de, en, fr, es, it };
+const dicts: Record<Lang, Dict> = { de, en };
 
 export const LANGS: { id: Lang; label: string }[] = [
   { id: 'de', label: 'Deutsch' },
   { id: 'en', label: 'English' },
-  { id: 'fr', label: 'Français' },
-  { id: 'es', label: 'Español' },
-  { id: 'it', label: 'Italiano' },
 ];
 
-const locales: Record<Lang, string> = { de: 'de-DE', en: 'en-GB', fr: 'fr-FR', es: 'es-ES', it: 'it-IT' };
+const locales: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' };
 
 let current: Lang = 'de';
 export function setLang(l: Lang) {
@@ -39,3 +33,21 @@ export function t(key: TKey, params?: Record<string, string | number>): string {
   return s;
 }
 
+/** Größe lesbar: 1,4 MB */
+export function fmtSize(n: number) {
+  if (!Number.isFinite(n)) return '–';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1000 && i < u.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toLocaleString(getLocale(), { maximumFractionDigits: i === 0 ? 0 : n < 10 ? 1 : 0 })} ${u[i]}`;
+}
+export function fmtDate(ms: number, time = true) {
+  if (!ms) return '–';
+  return new Date(ms).toLocaleString(getLocale(), time ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' });
+}
+export function fmtNum(n: number) {
+  return n.toLocaleString(getLocale());
+}
