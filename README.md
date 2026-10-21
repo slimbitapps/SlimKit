@@ -13,7 +13,7 @@ Free · no ads · no account · no internet needed · Windows & Mac.
 - **Every year automatically** – SlimKit continues your folder structure on 1 January by itself.
 - **Right in the right-click menu** – Finder Quick Actions on the Mac, a “SlimKit” submenu and “Send to” on Windows. Set up with one click, no admin rights.
 - **Send to your phone and back – no app** – scan a QR code, download files (or all as ZIP) or upload photos straight into a folder. Works with any iPhone or Android, only in your own Wi-Fi.
-- **Batch rename** with live preview, **resize & convert images** (target size in KB, removes location data), **set dates** from EXIF/video or from the file name, **combine images and PDFs**, **sort into folders by month or type**, **find duplicates**, **remove empty folders**, **see what takes up space**, **export file lists**, checksums …
+- **Batch rename** with live preview, **resize images by purpose** (email, WhatsApp, forms …) (target size in KB, removes location data), **set dates** from EXIF/video or from the file name, **combine images and PDFs**, **sort into folders by month or type**, **find duplicates**, **remove empty folders**, **see what takes up space**, **export file lists**, checksums …
 - **Undo** – every change is in the history and can be undone with one click.
 - Simple mode for everyone, expert mode with every option · English & German · light & dark.
 

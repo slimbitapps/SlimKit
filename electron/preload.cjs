@@ -3,8 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const CHANNELS = [
   'settings:get', 'settings:set', 'app:info', 'launch:take',
-  'fs:info', 'fs:expand', 'fs:pick', 'fs:reveal', 'fs:open', 'fs:exists', 'fs:trash', 'fs:dirSize',
-  'structure:suggest', 'structure:plan', 'structure:apply', 'templates:save', 'templates:remove', 'templates:apply',
+  'fs:info', 'fs:expand', 'fs:pick', 'fs:reveal', 'fs:open', 'fs:exists', 'fs:trash', 'fs:dirSize', 'fs:thumb',
+  'structure:suggest', 'structure:plan', 'structure:apply', 'structure:create', 'templates:save', 'templates:remove', 'templates:apply',
   'rename:preview', 'rename:apply', 'dates:preview', 'dates:apply', 'dates:read',
   'images:read', 'images:write', 'images:done', 'images:copyTimes', 'pdf:merge', 'pdf:split',
   'sort:preview', 'sort:apply', 'flatten:preview', 'flatten:apply', 'empty:find', 'dupes:find', 'size:report', 'list:export', 'hash:compute',

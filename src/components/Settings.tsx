@@ -4,6 +4,7 @@ import { useStore, updateSettings, updatePrefs, closeDialog, showIntroAgain, cal
 import type { Lang, Prefs } from '../types';
 import { Group, Logo, Row, Seg } from './ui';
 import { IconClose, IconSettings, IconMouse, IconSend, IconHelp, IconInfo, IconLock, IconCheck } from '../icons';
+import { ArtRightClick } from './art';
 import slimbitMark from '../assets/slimbit-mark.png';
 
 const WEBSITE_URL = 'https://slimbitapps.github.io/';
@@ -114,6 +115,9 @@ function MenuTab() {
   return (
     <>
       <Head title="settings.menu" sub={isMac ? 'menu.sub.mac' : 'menu.sub.win'} />
+      <div style={{ maxWidth: 340, margin: '4px 0 14px' }}>
+        <ArtRightClick mac={isMac} />
+      </div>
       <div className={`banner ${menu?.installed ? 'success' : 'info'}`}>
         {menu?.installed ? <IconCheck size={18} /> : <IconMouse size={18} />}
         <div className="grow">{menu?.unsupported ? t('menu.unsupported') : menu?.installed ? t('menu.status.on') : t('menu.status.off')}</div>

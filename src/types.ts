@@ -40,7 +40,7 @@ export interface Settings {
   prefs: Prefs;
   menu: { installed: boolean; actions: string[] };
   background: { tray: boolean; autostart: boolean };
-  images: { size: string; maxSide: number; percent: number; format: 'same' | 'jpeg' | 'png' | 'webp'; quality: number; targetKB: number; output: 'folder' | 'next' | 'replace' };
+  images: { size: string; customBy?: 'px' | 'percent' | 'kb'; maxSide: number; percent: number; format: 'same' | 'jpeg' | 'png' | 'webp'; quality: number; targetKB: number; output: 'folder' | 'next' | 'replace' };
   structure: { includeExt: string[]; step: number };
   transfer: { port: number; inbox: string; address: string };
   templates: Template[];
@@ -78,6 +78,7 @@ export interface AppInfo {
   locale: string;
   home: string;
   downloads: string;
+  desktop: string;
   pictures: string;
   documents: string;
 }

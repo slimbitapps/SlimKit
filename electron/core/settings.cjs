@@ -9,7 +9,7 @@ const DEFAULTS = {
   prefs: { lang: '', theme: 'system', mode: 'simple' },
   menu: { installed: false, actions: ['open', 'structure', 'rename', 'images', 'send', 'receive', 'dates', 'sort', 'pdf', 'copypath', 'newfile'] },
   background: { tray: true, autostart: false },
-  images: { size: 'fhd', maxSide: 1920, percent: 50, format: 'same', quality: 82, targetKB: 0, output: 'folder' },
+  images: { size: 'email', customBy: 'px', maxSide: 1920, percent: 50, format: 'same', quality: 82, targetKB: 500, output: 'folder' },
   structure: { includeExt: [], step: 1 },
   transfer: { port: 8643, inbox: '', address: 'auto' },
   templates: [],

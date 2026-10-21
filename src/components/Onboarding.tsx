@@ -3,8 +3,10 @@ import { t, LANGS } from '../i18n';
 import { useStore, updatePrefs, finishOnboarding, call, refreshMenu, updateSettings } from '../store';
 import type { Prefs } from '../types';
 import { Logo } from './ui';
-import { IconArrowLeft, IconArrowRight, IconCheck, IconShield, IconMouse, IconUndo, IconBolt } from '../icons';
-import { ToolIcon } from './kit';
+import { IconArrowLeft, IconArrowRight, IconCheck, IconShield, IconMouse, IconBolt } from '../icons';
+import { ArtRightClick, ArtStructure, ArtUndo } from './art';
+
+const MODE_COLORS = ['#14b8a6', '#f97316', '#22c55e', '#10b981', '#6366f1', '#a855f7', '#ef4444', '#0ea5e9', '#eab308', '#64748b', '#ec4899', '#84cc16', '#06b6d4', '#8b5cf6', '#f59e0b', '#94a3b8', '#78716c'];
 
 /** Einführung beim ersten Start: Sprache → Aussehen → Bedienung → Rechtsklick-Menü → So geht's */
 export function Onboarding() {
@@ -26,11 +28,10 @@ export function Onboarding() {
           {id === 'lang' && (
             <>
               <div className="row" style={{ justifyContent: 'center' }}>
-                <Logo size={64} />
+                <Logo size={88} />
               </div>
-              <div className="welcome-words" style={{ marginTop: 18 }}>
-                Willkommen · Welcome
-              </div>
+              <div className="onb-brand">SlimKit</div>
+              <div className="welcome-words">Willkommen · Welcome</div>
               <h1>{t('onb.lang.title')}</h1>
               <p className="lead">{t('onb.lang.sub')}</p>
               <div className="choice-grid cols-2">
@@ -79,6 +80,11 @@ export function Onboarding() {
               <div className="choice-grid cols-2">
                 {(['simple', 'expert'] as Prefs['mode'][]).map((m) => (
                   <button key={m} className={`choice ${prefs.mode === m ? 'on' : ''}`} style={{ padding: 20 }} onClick={() => updatePrefs({ mode: m })}>
+                    <span className={`mode-preview ${m}`}>
+                      {Array.from({ length: m === 'simple' ? 8 : 17 }, (_, i) => (
+                        <i key={i} style={{ background: MODE_COLORS[i % MODE_COLORS.length] }} />
+                      ))}
+                    </span>
                     <span className="ch-title" style={{ fontSize: 17 }}>
                       {t(`mode.${m}`)}
                       {m === 'simple' && (
@@ -104,6 +110,9 @@ export function Onboarding() {
 
           {id === 'menu' && (
             <>
+              <div className="onb-art">
+                <ArtRightClick mac={isMac} />
+              </div>
               <h1>{t('onb.menu.title')}</h1>
               <p className="lead">{t(isMac ? 'onb.menu.sub.mac' : 'onb.menu.sub.win')}</p>
               <div className={`perm-card ${menu?.installed ? 'ok' : ''}`}>
@@ -147,9 +156,9 @@ export function Onboarding() {
               <p className="lead">{t('onb.tour.sub')}</p>
               <div className="tour">
                 {[
-                  [<IconMouse size={34} key="1" />, 1],
-                  [<div className="tour-tools" key="2"><ToolIcon id="structure" size={34} /><ToolIcon id="images" size={34} /><ToolIcon id="send" size={34} /></div>, 2],
-                  [<IconUndo size={34} key="3" />, 3],
+                  [<ArtRightClick mac={isMac} key="1" />, 1],
+                  [<ArtStructure key="2" />, 2],
+                  [<ArtUndo key="3" />, 3],
                 ].map(([ill, i]) => (
                   <div key={String(i)} className="tour-card">
                     <div className="ill">{ill}</div>

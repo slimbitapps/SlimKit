@@ -1,73 +1,101 @@
 import { useEffect, useRef, useState } from 'react';
 import { t, fmtSize, fmtNum } from '../i18n';
 import { call, useStore, toast, updateSettings } from '../store';
-import { Picker, ToolFrame, Empty, Busy, useFiles } from '../components/kit';
-import { IconSend, IconReceive, IconCopy, IconPhone, IconWifi, IconCheck, IconStop, IconFolder } from '../icons';
+import { Picker, ToolPage, Step, More, Busy, useFiles, Thumb, summarize, FoundStrip } from '../components/kit';
+import { IconCopy, IconPhone, IconCheck, IconStop, IconFolder, IconHotspot, IconRefresh } from '../icons';
 import type { TransferInfo } from '../types';
 
 type Ev = { ev: string; id?: string; name?: string; size?: number; received?: number; device?: string; path?: string; zip?: boolean };
 
-/** Gemeinsamer QR-Bereich für Senden und Empfangen */
+/** QR-Code mit Status (wartet / verbunden) */
 function QrPanel({ info, mode, onStop }: { info: TransferInfo; mode: 'send' | 'receive'; onStop: () => void }) {
-  const expert = useStore((s) => s.settings.prefs.mode === 'expert');
   const [copied, setCopied] = useState(false);
+  const device = info.devices[info.devices.length - 1];
   return (
     <div className="qr-panel">
-      <div className="qr" data-testid="qr" dangerouslySetInnerHTML={{ __html: info.qr }} />
-      <ol className="steps">
-        <li>
-          <span className="num">1</span>
-          {t('transfer.step1')}
-        </li>
-        <li>
-          <span className="num">2</span>
-          {t('transfer.step2')}
-        </li>
-        <li>
-          <span className="num">3</span>
-          {t(mode === 'send' ? 'transfer.step3.send' : 'transfer.step3.receive')}
-        </li>
-      </ol>
-      <div className="row small" style={{ gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <span className="chip mono" title={info.url}>
-          <IconWifi size={13} /> {info.address ? info.address.address : '127.0.0.1'}
-        </span>
-        <button
-          className="btn xs ghost"
-          onClick={() => {
-            call('clipboard:write', info.url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-        >
-          {copied ? <IconCheck size={13} /> : <IconCopy size={13} />} {t('transfer.copyLink')}
-        </button>
-        <button className="btn xs ghost" onClick={onStop} data-testid="transfer-stop">
-          <IconStop size={12} /> {t('transfer.stop')}
-        </button>
+      <div className="qr-left">
+        <div className="qr" data-testid="qr" dangerouslySetInnerHTML={{ __html: info.qr }} />
       </div>
-      {!info.address && <div className="banner warn small">{t('transfer.noNetwork')}</div>}
-      {expert && info.addresses.length > 1 && (
-        <select
-          className="select small"
-          style={{ marginTop: 8 }}
-          value={info.address?.address || 'auto'}
-          onChange={async (e) => {
-            await updateSettings({ transfer: { address: e.target.value } });
-            window.dispatchEvent(new Event('transfer-refresh'));
-          }}
-        >
-          {info.addresses.map((a) => (
-            <option key={a.address} value={a.address}>
-              {a.name} – {a.address}
-            </option>
-          ))}
-        </select>
-      )}
-      <p className="small faint" style={{ marginTop: 10 }}>
-        {t('transfer.wifiHint')}
-      </p>
+      <div className="qr-right">
+        <div className={`qr-status ${device ? 'ok' : ''}`} data-testid="qr-status">
+          {device ? (
+            <>
+              <IconCheck size={16} strokeWidth={3} /> {t('transfer.connected', { name: device.name })}
+            </>
+          ) : (
+            <>
+              <span className="pulse" /> {t('transfer.waiting')}
+            </>
+          )}
+        </div>
+        <ol className="qr-steps">
+          <li>
+            <span className="n">1</span>
+            {t('transfer.step1')}
+          </li>
+          <li>
+            <span className="n">2</span>
+            {t('transfer.step2')}
+          </li>
+          <li>
+            <span className="n">3</span>
+            {t(mode === 'send' ? 'transfer.step3.send' : 'transfer.step3.receive')}
+          </li>
+        </ol>
+        <div className="row small" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <button
+            className="btn sm"
+            onClick={() => {
+              call('clipboard:write', info.url);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+          >
+            {copied ? <IconCheck size={13} /> : <IconCopy size={13} />} {t('transfer.copyLink')}
+          </button>
+          <button className="btn sm ghost" onClick={onStop} data-testid="transfer-stop">
+            <IconStop size={12} /> {t('transfer.stop')}
+          </button>
+        </div>
+        {!info.address && <div className="banner warn small">{t('transfer.noNetwork')}</div>}
+      </div>
     </div>
+  );
+}
+
+/** Hilfe, wenn das Handy den Computer nicht findet */
+function Trouble({ info }: { info: TransferInfo | null }) {
+  return (
+    <More label={t('transfer.trouble')}>
+      <div className="trouble">
+        <IconHotspot size={22} />
+        <ol>
+          <li>{t('transfer.trouble.1')}</li>
+          <li>{t('transfer.trouble.2')}</li>
+          <li>{t('transfer.trouble.3')}</li>
+          <li>{t('transfer.trouble.4')}</li>
+        </ol>
+      </div>
+      {info && info.addresses.length > 1 && (
+        <div className="opt-row">
+          <div className="grow opt-title">{t('transfer.network')}</div>
+          <select
+            className="select"
+            value={info.address?.address || 'auto'}
+            onChange={async (e) => {
+              await updateSettings({ transfer: { address: e.target.value } });
+              window.dispatchEvent(new Event('transfer-refresh'));
+            }}
+          >
+            {info.addresses.map((a) => (
+              <option key={a.address} value={a.address}>
+                {a.name} – {a.address}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </More>
   );
 }
 
@@ -100,75 +128,33 @@ function useTransfer(start: (() => Promise<TransferInfo>) | null) {
       call('transfer:stop');
     };
   }, [!!start]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { info, events, stop: () => call('transfer:stop').then(() => setInfo(null)), restart: () => start && start().then(setInfo) };
+  return { info, events, stop: () => call('transfer:stop').then(() => setInfo(null)), restart: () => startRef.current && startRef.current().then(setInfo) };
 }
 
 export function SendTool({ paths: initial }: { paths: string[] }) {
   const [paths, setPaths] = useState(initial);
   const files = useFiles(paths, { recursive: true });
-  const ready = paths.length > 0 && files !== null;
+  const top = useFiles(paths, false);
+  const ready = paths.length > 0 && files !== null && files.length > 0;
   const key = paths.join('|');
   const { info, events, stop, restart } = useTransfer(ready ? () => call<TransferInfo>('transfer:start', { mode: 'send', paths }) : null);
   useEffect(() => {
     if (ready && info) restart();
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const total = (files || []).reduce((a, f) => a + f.size, 0);
-  const devices = info?.devices || [];
   const downloads = events.filter((e) => e.ev === 'download');
   return (
-    <ToolFrame
-      id="send"
-      side={
-        <>
-          <Picker mode="files" paths={paths} onChange={setPaths} label={t('send.what')} testId="send-pick" />
-          {files && files.length > 0 && (
-            <div className="card pad small">
-              <b>{t('send.summary', { n: fmtNum(files.length), size: fmtSize(total) })}</b>
-              <p className="muted" style={{ margin: '6px 0 0' }}>
-                {t('send.how')}
-              </p>
-            </div>
-          )}
-          {devices.length > 0 && (
-            <>
-              <div className="section-label">{t('transfer.devices')}</div>
-              <div className="card">
-                {devices.map((d) => (
-                  <div className="list-row" key={d.ip}>
-                    <IconPhone size={16} />
-                    <span className="grow">{d.name}</span>
-                    <span className="faint small mono">{d.ip}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {downloads.length > 0 && (
-            <>
-              <div className="section-label">{t('send.downloads')}</div>
-              <div className="card">
-                {downloads.slice(-8).map((d, i) => (
-                  <div className="list-row" key={i}>
-                    <IconCheck size={15} className="ok-ic" />
-                    <span className="grow ellipsis">{d.name}</span>
-                    <span className="faint small">{fmtSize(d.size || 0)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      }
-      main={
-        !paths.length ? (
-          <Empty icon={<IconSend size={40} />} text={t('send.empty')} />
-        ) : files && !files.length ? (
-          <Empty text={t('send.none')} />
-        ) : !info ? (
-          ready ? (
-            <div className="empty-state">
+    <ToolPage id="send">
+      <Step n={1} title={t('send.s1')} hint={t('send.s1.hint')}>
+        <Picker mode="files" paths={paths} onChange={setPaths} empty={t('send.pick')} testId="send-pick" />
+        {files && paths.length > 0 && !files.length && <div className="banner warn small" style={{ marginTop: 10 }}>{t('send.none')}</div>}
+        {top && files && files.length > 0 && top.length === 1 && top[0].isDir && <FoundStrip files={files} label={t('send.how', { sum: summarize(files) })} />}
+      </Step>
+      <Step n={2} title={t('send.s2')} hint={t('transfer.wifiHint')} disabled={!ready}>
+        {!info ? (
+          files && files.length ? (
+            <div className="center-row">
               <button className="btn primary" onClick={restart}>
-                {t('transfer.again')}
+                <IconRefresh size={15} /> {t('transfer.again')}
               </button>
             </div>
           ) : (
@@ -176,9 +162,23 @@ export function SendTool({ paths: initial }: { paths: string[] }) {
           )
         ) : (
           <QrPanel info={info} mode="send" onStop={stop} />
-        )
-      }
-    />
+        )}
+        <Trouble info={info} />
+      </Step>
+      {downloads.length > 0 && (
+        <Step n={3} title={t('send.s3', { n: downloads.length })}>
+          <div className="card">
+            {downloads.slice(-10).reverse().map((d, i) => (
+              <div className="list-row" key={i}>
+                <IconCheck size={16} className="ok-ic" />
+                <span className="grow ellipsis">{d.name}</span>
+                <span className="faint small">{fmtSize(d.size || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </Step>
+      )}
+    </ToolPage>
   );
 }
 
@@ -200,59 +200,74 @@ export function ReceiveTool({ paths }: { paths: string[] }) {
   const uploads = events.filter((e) => e.ev.startsWith('upload'));
   const doneN = uploads.filter((u) => u.ev === 'upload-done').length;
   return (
-    <ToolFrame
-      id="receive"
-      side={
-        <>
-          <Picker mode="dir" paths={dir} onChange={setDir} label={t('receive.where')} testId="receive-dir" />
-          <p className="small muted">{t('receive.how')}</p>
-          {target && (
+    <ToolPage id="receive">
+      <Step
+        n={1}
+        title={t('receive.s1')}
+        hint={t('receive.how')}
+        right={
+          target && target !== inbox ? (
             <button className="btn sm ghost" onClick={() => updateSettings({ transfer: { inbox: target } }).then(() => toast(t('receive.default.saved')))}>
               {t('receive.default')}
             </button>
-          )}
-          {uploads.length > 0 && (
-            <>
-              <div className="section-label">{t('receive.list', { n: doneN })}</div>
-              <div className="card" data-testid="receive-list">
-                {uploads
-                  .slice(-30)
-                  .reverse()
-                  .map((u) => (
-                    <div className="list-row" key={u.id}>
-                      {u.ev === 'upload-done' ? <IconCheck size={15} className="ok-ic" /> : <IconReceive size={15} />}
-                      <div className="grow" style={{ minWidth: 0 }}>
-                        <div className="ellipsis">{u.name}</div>
-                        {u.ev === 'upload-progress' || u.ev === 'upload-start' ? (
-                          <div className="progress sm">
-                            <i style={{ width: `${((u.received || 0) / Math.max(1, u.size || 1)) * 100}%` }} />
-                          </div>
-                        ) : u.ev === 'upload-failed' ? (
-                          <div className="small" style={{ color: 'var(--danger)' }}>
-                            {t('receive.failed')}
-                          </div>
-                        ) : null}
+          ) : undefined
+        }
+      >
+        <Picker mode="dir" paths={dir} onChange={setDir} empty={t('pick.folder')} testId="receive-dir" />
+      </Step>
+      <Step n={2} title={t('receive.s2')} hint={t('transfer.wifiHint')} disabled={!target}>
+        {!info ? (
+          <div className="center-row">
+            <button className="btn primary" onClick={restart}>
+              <IconRefresh size={15} /> {t('transfer.again')}
+            </button>
+          </div>
+        ) : (
+          <QrPanel info={info} mode="receive" onStop={stop} />
+        )}
+        <Trouble info={info} />
+      </Step>
+      <Step
+        n={3}
+        title={doneN ? t('receive.list', { n: fmtNum(doneN) }) : t('receive.s3')}
+        hint={uploads.length ? undefined : t('receive.s3.hint')}
+        right={
+          doneN > 0 ? (
+            <button className="btn sm" onClick={() => call('fs:open', target)}>
+              <IconFolder size={14} /> {t('receive.open')}
+            </button>
+          ) : undefined
+        }
+      >
+        {uploads.length > 0 && (
+          <div className="received-grid" data-testid="receive-list">
+            {uploads
+              .slice(-40)
+              .reverse()
+              .map((u) => (
+                <div className={`received ${u.ev}`} key={u.id}>
+                  {u.ev === 'upload-done' && u.path ? <Thumb file={{ path: u.path, kind: /\.(jpe?g|png|heic|gif|webp)$/i.test(u.name || '') ? 'image' : 'other', ext: '', isDir: false }} size={56} /> : <span className="thumb" style={{ width: 56, height: 56 }}><IconPhone size={22} /></span>}
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="ellipsis">{u.name}</div>
+                    {u.ev === 'upload-done' ? (
+                      <div className="small ok-text">
+                        <IconCheck size={12} strokeWidth={3} className="ok-ic" /> {fmtSize(u.size || 0)}
                       </div>
-                      <span className="faint small">{fmtSize(u.size || 0)}</span>
-                    </div>
-                  ))}
-              </div>
-              {doneN > 0 && (
-                <button className="btn sm" style={{ marginTop: 10 }} onClick={() => call('fs:open', target)}>
-                  <IconFolder size={14} /> {t('receive.open')}
-                </button>
-              )}
-            </>
-          )}
-        </>
-      }
-      main={!target ? <Busy /> : !info ? (
-        <div className="empty-state">
-          <button className="btn primary" onClick={restart}>
-            {t('transfer.again')}
-          </button>
-        </div>
-      ) : <QrPanel info={info} mode="receive" onStop={stop} />}
-    />
+                    ) : u.ev === 'upload-failed' ? (
+                      <div className="small" style={{ color: 'var(--danger)' }}>
+                        {t('receive.failed')}
+                      </div>
+                    ) : (
+                      <div className="progress sm">
+                        <i style={{ width: `${((u.received || 0) / Math.max(1, u.size || 1)) * 100}%` }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </Step>
+    </ToolPage>
   );
 }

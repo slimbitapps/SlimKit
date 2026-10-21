@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { t, fmtSize, fmtNum } from '../i18n';
+import { t, fmtNum } from '../i18n';
 import { call, toast } from '../store';
-import { Picker, ToolFrame, Done, Empty, Busy, useFiles, errText, KindIcon } from '../components/kit';
-import { Seg } from '../components/ui';
-import { IconPdf, IconUp, IconDown, IconClose } from '../icons';
+import { Picker, ToolPage, Step, Choices, Done, useFiles, errText, Thumb } from '../components/kit';
+import { IconUp, IconDown, IconClose, IconForm, IconImage } from '../icons';
 import { toJpeg } from '../lib/image';
 import type { FileInfo } from '../types';
 
@@ -11,7 +10,7 @@ export function PdfTool({ paths: initial }: { paths: string[] }) {
   const [paths, setPaths] = useState(initial);
   const files = useFiles(paths, { kinds: ['image', 'doc'] });
   const [items, setItems] = useState<FileInfo[]>([]);
-  const [page, setPage] = useState<'auto' | 'a4'>('a4');
+  const [page, setPage] = useState<'a4' | 'auto'>('a4');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ out?: string; dir?: string; pages?: number; count?: number; historyId?: string } | null>(null);
@@ -54,85 +53,75 @@ export function PdfTool({ paths: initial }: { paths: string[] }) {
 
   if (done)
     return (
-      <ToolFrame
-        id="pdf"
-        side={null}
-        main={<Done text={done.out ? t('pdf.done', { n: done.pages || 0 }) : t('pdf.split.done', { n: done.count || 0 })} reveal={done.out || done.dir} historyId={done.historyId} />}
-      />
+      <ToolPage id="pdf" compact>
+        <Done text={done.out ? t('pdf.done', { n: done.pages || 0 }) : t('pdf.split.done', { n: done.count || 0 })} reveal={done.out || done.dir} historyId={done.historyId} />
+      </ToolPage>
     );
 
+  const ready = items.length > 0;
   return (
-    <ToolFrame
+    <ToolPage
       id="pdf"
-      side={
+      foot={
         <>
-          <Picker mode="files" paths={paths} onChange={setPaths} label={t('pdf.what')} testId="pdf-pick" />
-          {items.length > 0 && !onePdf && (
-            <>
-              <div className="section-label">{t('pdf.page')}</div>
-              <div className="card pad">
-                <Seg value={page} onChange={setPage} options={[['a4', t('pdf.page.a4')], ['auto', t('pdf.page.auto')]]} />
-              </div>
-              <label className="field" style={{ marginTop: 12 }}>
-                <span>{t('pdf.name')}</span>
-                <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={items.length === 1 ? items[0].name.replace(/\.[^.]+$/, '') : t('pdf.name.default')} />
-              </label>
-            </>
+          <div className="foot-sum">
+            {ready ? <b>{onePdf ? t('pdf.one') : t('pdf.foot', { n: items.length })}</b> : <span>{t('pdf.foot.empty')}</span>}
+          </div>
+          {onePdf ? (
+            <button className="btn primary xl" disabled={busy} onClick={split} data-testid="pdf-split">
+              {busy ? t('common.working') : t('pdf.split')}
+            </button>
+          ) : (
+            <button className="btn primary xl" disabled={busy || !ready} onClick={merge} data-testid="pdf-apply">
+              {busy ? t('common.working') : t('pdf.apply', { n: items.length })}
+            </button>
           )}
         </>
       }
-      main={
-        !paths.length ? (
-          <Empty icon={<IconPdf size={40} />} text={t('pdf.empty')} />
-        ) : !files ? (
-          <Busy />
-        ) : !items.length ? (
-          <Empty text={t('pdf.none')} />
-        ) : (
-          <div className="preview">
-            <div className="preview-head">
-              <b>{onePdf ? t('pdf.one') : t('pdf.order', { n: fmtNum(items.length) })}</b>
-            </div>
-            <div className="table" data-testid="pdf-list">
-              {items.map((f, i) => (
-                <div className="trow" key={f.path}>
-                  <span className="faint small" style={{ width: 22 }}>
-                    {i + 1}.
-                  </span>
-                  <KindIcon kind={f.kind} size={14} />
-                  <span className="ellipsis grow">{f.name}</span>
-                  <span className="faint small">{fmtSize(f.size)}</span>
-                  <button className="btn icon ghost xs" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t('pdf.up')}>
-                    <IconUp size={14} />
-                  </button>
-                  <button className="btn icon ghost xs" disabled={i === items.length - 1} onClick={() => move(i, 1)} aria-label={t('pdf.down')}>
-                    <IconDown size={14} />
-                  </button>
-                  <button className="btn icon ghost xs" onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label={t('common.remove')}>
-                    <IconClose size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
+    >
+      <Step n={1} title={t('pdf.s1')} hint={t('pdf.s1.hint')}>
+        <Picker mode="files" paths={paths} onChange={setPaths} empty={t('pdf.pick')} testId="pdf-pick" />
+        {files && paths.length > 0 && !items.length && <div className="banner warn small" style={{ marginTop: 10 }}>{t('pdf.none')}</div>}
+      </Step>
+      {!onePdf && (
+        <Step n={2} title={t('pdf.s2')} hint={t('pdf.s2.hint')} disabled={!ready}>
+          <div className="order-list" data-testid="pdf-list">
+            {items.map((f, i) => (
+              <div className="order-row" key={f.path}>
+                <span className="order-n">{i + 1}</span>
+                <Thumb file={f} size={44} />
+                <span className="ellipsis grow">{f.name}</span>
+                <button className="btn icon ghost sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t('pdf.up')}>
+                  <IconUp size={15} />
+                </button>
+                <button className="btn icon ghost sm" disabled={i === items.length - 1} onClick={() => move(i, 1)} aria-label={t('pdf.down')}>
+                  <IconDown size={15} />
+                </button>
+                <button className="btn icon ghost sm" onClick={() => setItems(items.filter((_, j) => j !== i))} aria-label={t('common.remove')}>
+                  <IconClose size={14} />
+                </button>
+              </div>
+            ))}
           </div>
-        )
-      }
-      foot={
-        items.length > 0 && (
-          <>
-            <div className="spacer" />
-            {onePdf ? (
-              <button className="btn primary lg" disabled={busy} onClick={split} data-testid="pdf-split">
-                {busy ? t('common.working') : t('pdf.split')}
-              </button>
-            ) : (
-              <button className="btn primary lg" disabled={busy} onClick={merge} data-testid="pdf-apply">
-                {busy ? t('common.working') : t('pdf.apply', { n: items.length })}
-              </button>
-            )}
-          </>
-        )
-      }
-    />
+        </Step>
+      )}
+      {!onePdf && (
+        <Step n={3} title={t('pdf.s3')} disabled={!ready}>
+          <Choices
+            value={page}
+            onChange={setPage}
+            options={[
+              { id: 'a4', icon: <IconForm size={20} />, title: t('pdf.page.a4'), desc: t('pdf.page.a4.desc'), badge: t('common.recommended') },
+              { id: 'auto', icon: <IconImage size={20} />, title: t('pdf.page.auto'), desc: t('pdf.page.auto.desc') },
+            ]}
+          />
+          <label className="field" style={{ marginTop: 14 }}>
+            <span>{t('pdf.name')}</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={items.length === 1 ? items[0].name.replace(/\.[^.]+$/, '') : t('pdf.name.default')} style={{ maxWidth: 360 }} />
+          </label>
+          <p className="small muted" style={{ marginBottom: 0 }}>{t('pdf.count', { n: fmtNum(items.length) })}</p>
+        </Step>
+      )}
+    </ToolPage>
   );
 }

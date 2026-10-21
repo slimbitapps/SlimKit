@@ -99,7 +99,7 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
   await win.click(`[data-testid="lang-${lang}"]`);
   await shot(win, '01-onb-language');
   await win.click('[data-testid="onb-next"]');
-  await win.click('[data-testid="theme-dark"]');
+  await win.click(`[data-testid="theme-${process.env.E2E_THEME || 'light'}"]`);
   await shot(win, '02-onb-theme');
   await win.click('[data-testid="onb-next"]');
   await shot(win, '03-onb-mode');
@@ -182,8 +182,9 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
 
   // ---------------------------------------------------------------- Bilder verkleinern
   await launch('images', [italy]);
-  await win.waitForSelector('[data-testid="images-list"] .thumb-row');
-  await win.click('[data-testid="images-size-small"]');
+  await win.waitForSelector('[data-testid="images-sample"]');
+  await win.click('[data-testid="images-size-chat"]');
+  await win.waitForSelector('[data-testid="images-sample"]');
   await shot(win, '50-images');
   await win.click('[data-testid="images-apply"]');
   await win.waitForSelector('[data-testid="done"]', { timeout: 30000 });
@@ -197,7 +198,7 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
 
   // ---------------------------------------------------------------- PDF zusammenfügen
   await launch('pdf', [path.join(italy, imgNames[0]), path.join(italy, imgNames[1]), path.join(italy, imgNames[2])]);
-  await win.waitForSelector('[data-testid="pdf-list"] .trow');
+  await win.waitForSelector('[data-testid="pdf-list"] .order-row');
   await shot(win, '55-pdf');
   await win.click('[data-testid="pdf-apply"]');
   await win.waitForSelector('[data-testid="done"]');
@@ -208,7 +209,7 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
 
   // ---------------------------------------------------------------- Sortieren (Vorschau)
   await launch('sort', [italy]);
-  await win.waitForSelector('[data-testid="sort-preview"] .trow');
+  await win.waitForSelector('[data-testid="sort-preview"] .folder-card');
   await shot(win, '56-sort');
   await win.click('[data-testid="back"]');
 
@@ -243,7 +244,7 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
     return { ok: r.ok, len: b.length, sig: b[0] === 0x50 && b[1] === 0x4b };
   });
   assert.ok(zip.ok && zip.sig && zip.len > 1000, 'ZIP geladen');
-  await win.waitForSelector('.list-row >> text=iPhone');
+  await win.waitForSelector('[data-testid="qr-status"].ok');
   await shot(win, '62-send-connected');
   await phone.close();
   await win.click('[data-testid="back"]');
@@ -298,14 +299,14 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
   await win.keyboard.press('Escape');
 
   // Expertenmodus + hell
-  await app.evaluate(() => global.__slimkit.setSettings({ prefs: { mode: 'expert', theme: 'light' } }));
+  await app.evaluate(() => global.__slimkit.setSettings({ prefs: { mode: 'expert', theme: 'dark' } }));
   await win.click('.header .brand');
   await win.waitForSelector('[data-testid="tile-dupes"]');
   await sleep(500);
-  await shot(win, '85-home-expert-light');
+  await shot(win, '85-home-expert-dark');
   await launch('structure', [photos]);
   await win.waitForSelector('[data-testid="structure-tree"] .tree-row:nth-child(4)');
-  await shot(win, '86-structure-light');
+  await shot(win, '86-structure-dark');
 
   // ---------------------------------------------------------------- Ergebnis
   const relevant = errors.filter((e) => !/favicon|ERR_ABORTED|Autofill/.test(e));

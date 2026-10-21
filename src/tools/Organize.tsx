@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { t, fmtSize, fmtNum, type TKey } from '../i18n';
 import { call, toast, refreshHistory } from '../store';
-import { Picker, ToolFrame, Done, Empty, Busy, useFiles, errText, KindIcon } from '../components/kit';
+import { Picker, ToolFrame, ToolPage, Step, Choices, Done, Empty, Busy, useFiles, errText, KindIcon, Thumb } from '../components/kit';
 import { Group, Row, Seg, Switch } from '../components/ui';
-import { IconSort, IconFlatten, IconBroom, IconCopies, IconPie, IconList, IconFolder, IconTrash } from '../icons';
+import { IconFlatten, IconBroom, IconCopies, IconPie, IconList, IconFolder, IconTrash } from '../icons';
 import { basename } from '../paths';
 
 type Move = { from: string; to: string; folder: string };
@@ -21,79 +21,84 @@ export function SortTool({ paths: initial }: { paths: string[] }) {
     call<Move[]>('sort:preview', paths, { by }).then(setMoves);
   }, [paths, by]);
   const groups = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const x of moves || []) m.set(x.folder, (m.get(x.folder) || 0) + 1);
+    const m = new Map<string, Move[]>();
+    for (const x of moves || []) m.set(x.folder, [...(m.get(x.folder) || []), x]);
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
   }, [moves]);
-  if (done) return <ToolFrame id="sort" side={null} main={<Done text={t('sort.done', { n: fmtNum(done.done) })} reveal={paths[0]} historyId={done.historyId} />} />;
+  if (done)
+    return (
+      <ToolPage id="sort" compact>
+        <Done text={t('sort.done', { n: fmtNum(done.done) })} reveal={paths[0]} historyId={done.historyId} />
+      </ToolPage>
+    );
+  const ready = !!moves?.length;
   return (
-    <ToolFrame
+    <ToolPage
       id="sort"
-      side={
+      foot={
         <>
-          <Picker mode="files" paths={paths} onChange={setPaths} label={t('sort.what')} testId="sort-pick" />
-          <div className="section-label">{t('sort.by')}</div>
-          <div className="preset-list cols-2">
-            {(['month', 'year', 'day', 'type', 'ext'] as const).map((b) => (
-              <button key={b} className={`preset ${by === b ? 'on' : ''}`} onClick={() => setBy(b)} data-testid={`sort-${b}`}>
-                <b>{t(`sort.by.${b}` as TKey)}</b>
-                <span>{t(`sort.by.${b}.ex` as TKey)}</span>
-              </button>
-            ))}
+          <div className="foot-sum">
+            {ready ? (
+              <>
+                <b>{t('sort.preview', { n: fmtNum(moves!.length), f: groups.length })}</b>
+                <span>{t('common.undoHint')}</span>
+              </>
+            ) : (
+              <span>{t('sort.foot.empty')}</span>
+            )}
           </div>
-          <p className="small muted">{t('sort.hint')}</p>
+          <button
+            className="btn primary xl"
+            disabled={busy || !ready}
+            data-testid="sort-apply"
+            onClick={async () => {
+              setBusy(true);
+              try {
+                setDone(await call('sort:apply', paths, { by }, t('sort.title', { n: moves!.length })));
+              } catch (e) {
+                toast(errText(e), 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? t('common.working') : t('sort.apply', { n: fmtNum(moves?.length || 0) })}
+          </button>
         </>
       }
-      main={
-        !paths.length ? (
-          <Empty icon={<IconSort size={40} />} text={t('sort.empty')} />
-        ) : !moves ? (
-          <Busy />
-        ) : !moves.length ? (
-          <Empty text={t('sort.none')} />
-        ) : (
-          <div className="preview">
-            <div className="preview-head">
-              <b>{t('sort.preview', { n: fmtNum(moves.length), f: groups.length })}</b>
+    >
+      <Step n={1} title={t('sort.s1')} hint={t('sort.s1.hint')}>
+        <Picker mode="files" paths={paths} onChange={setPaths} empty={t('sort.pick')} testId="sort-pick" />
+        {moves && paths.length > 0 && !moves.length && <div className="banner warn small" style={{ marginTop: 10 }}>{t('sort.none')}</div>}
+      </Step>
+      <Step n={2} title={t('sort.s2')} hint={t('sort.hint')} disabled={!paths.length}>
+        <Choices
+          value={by}
+          onChange={setBy}
+          cols={3}
+          testPrefix="sort"
+          options={(['month', 'year', 'day', 'type', 'ext'] as const).map((b) => ({ id: b, title: t(`sort.by.${b}` as TKey), desc: t(`sort.by.${b}.ex` as TKey), badge: b === 'month' ? t('common.popular') : undefined }))}
+        />
+      </Step>
+      <Step n={3} title={t('sort.s3')} disabled={!ready}>
+        <div className="folder-cards" data-testid="sort-preview">
+          {groups.slice(0, 120).map(([folder, list]) => (
+            <div className="folder-card" key={folder}>
+              <div className="fc-head">
+                <IconFolder size={18} />
+                <b className="ellipsis">{folder}</b>
+                <span className="badge">{list.length}</span>
+              </div>
+              <div className="fc-thumbs">
+                {list.slice(0, 4).map((m) => (
+                  <Thumb key={m.from} file={{ path: m.from, kind: /\.(jpe?g|png|heic|heif|gif|webp|mov|mp4)$/i.test(m.from) ? 'image' : 'other', ext: '', isDir: false }} size={36} />
+                ))}
+              </div>
             </div>
-            <div className="table" data-testid="sort-preview">
-              {groups.map(([folder, n]) => (
-                <div className="trow" key={folder}>
-                  <IconFolder size={15} />
-                  <span className="grow ellipsis">{folder}</span>
-                  <span className="badge">{t('common.files', { n })}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      }
-      foot={
-        !!moves?.length && (
-          <>
-            <span className="muted small">{t('common.undoHint')}</span>
-            <div className="spacer" />
-            <button
-              className="btn primary lg"
-              disabled={busy}
-              data-testid="sort-apply"
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  setDone(await call('sort:apply', paths, { by }, t('sort.title', { n: moves.length })));
-                } catch (e) {
-                  toast(errText(e), 'error');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? t('common.working') : t('sort.apply', { n: fmtNum(moves.length) })}
-            </button>
-          </>
-        )
-      }
-    />
+          ))}
+        </div>
+      </Step>
+    </ToolPage>
   );
 }
 

@@ -492,7 +492,7 @@ handle('settings:set', (partial) => {
   }
   return settings.public();
 });
-handle('app:info', () => ({ version: app.getVersion(), electron: process.versions.electron, platform: process.platform, locale: app.getLocale(), home: os.homedir(), downloads: app.getPath('downloads'), pictures: app.getPath('pictures'), documents: app.getPath('documents') }));
+handle('app:info', () => ({ version: app.getVersion(), electron: process.versions.electron, platform: process.platform, locale: app.getLocale(), home: os.homedir(), downloads: app.getPath('downloads'), desktop: app.getPath('desktop'), pictures: app.getPath('pictures'), documents: app.getPath('documents') }));
 handle('launch:take', () => launchQueue.splice(0));
 
 handle('fs:info', async (paths) => (await Promise.all(paths.map(fileInfo))).filter(Boolean));
@@ -517,6 +517,24 @@ handle('fs:trash', async (paths) => {
   return { done };
 });
 handle('fs:dirSize', (p) => dirSize(p));
+// Vorschaubild (Fotos, Videos, PDFs) – über die Vorschau des Systems, sonst selbst verkleinert
+handle('fs:thumb', async (p, size = 160) => {
+  const s = Math.max(32, Math.min(512, Number(size) || 160));
+  try {
+    if (isMac || isWin) {
+      const img = await nativeImage.createThumbnailFromPath(p, { width: s, height: s });
+      if (!img.isEmpty()) return img.toDataURL();
+    }
+  } catch {
+    /* weiter mit dem einfachen Weg */
+  }
+  if (kindOf(path.basename(p)) !== 'image') return null;
+  const img = nativeImage.createFromPath(p);
+  if (img.isEmpty()) return null;
+  const { width, height } = img.getSize();
+  const k = s / Math.max(width, height);
+  return img.resize({ width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)), quality: 'good' }).toJPEG(80).toString('base64').replace(/^/, 'data:image/jpeg;base64,');
+});
 
 // Ordnerstruktur
 handle('structure:suggest', async (src) => {
@@ -533,6 +551,13 @@ handle('structure:apply', async (src, dest, opts, title) => {
   const plan = await structure.planStructure(src, dest, opts);
   const r = await structure.applyStructure(dest, plan, progress('structure'));
   const h = history.add({ tool: 'structure', title: title || path.basename(dest), count: r.created + r.copied, ops: r.ops });
+  return { ...r, ops: undefined, historyId: h?.id, dest };
+});
+// Ordner aus einer Liste anlegen (fertige Vorlagen)
+handle('structure:create', async (dest, dirs, title) => {
+  const plan = structure.planFromTemplate(dirs, dest, {});
+  const r = await structure.applyStructure(dest, plan);
+  const h = history.add({ tool: 'structure', title: title || path.basename(dest), count: r.created, ops: r.ops });
   return { ...r, ops: undefined, historyId: h?.id, dest };
 });
 handle('templates:save', async (src, name) => {

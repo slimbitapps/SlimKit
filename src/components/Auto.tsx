@@ -3,6 +3,7 @@ import { t, fmtDate, fmtNum, fmtSize, type TKey } from '../i18n';
 import { useStore, updateSettings, call, toast, refreshHistory, goHome } from '../store';
 import { Dialog, Group, Row, Switch, Seg } from './ui';
 import { Empty, Busy, Picker, ToolIcon } from './kit';
+import { ArtAuto } from './art';
 import { IconBolt, IconPlus, IconTrash, IconPlay, IconFolderTree, IconSort, IconBroom, IconArrowLeft, IconUndo, IconCheck } from '../icons';
 import type { Automation, HistoryItem } from '../types';
 import { basename } from '../paths';
@@ -25,51 +26,57 @@ export function AutoScreen() {
   const [preview, setPreview] = useState<{ a: Automation; data: any } | null>(null);
   const save = (next: Automation[]) => updateSettings({ automations: next });
 
-  const add = (type: Automation['type']) => {
-    const app = useStore.getState().app;
-    const base: Automation = { id: crypto.randomUUID(), type, enabled: true };
-    if (type === 'year') Object.assign(base, { parent: '', month: 1, day: 1, includeExt: [], lastYear: new Date().getFullYear() });
-    if (type === 'tidy') Object.assign(base, { folder: app.downloads, by: 'type', minAgeSec: 120 });
-    if (type === 'cleanup') Object.assign(base, { folder: app.downloads, days: 30 });
-    setEdit(base);
-  };
+  const app = useStore((s) => s.app);
+  // Fertige Vorschläge – ein Klick öffnet sie schon ausgefüllt
+  const presets: { key: string; type: Automation['type']; a: Partial<Automation> }[] = [
+    { key: 'year', type: 'year', a: { parent: '', month: 1, day: 1, includeExt: [], lastYear: new Date().getFullYear() } },
+    { key: 'downloads', type: 'tidy', a: { folder: app.downloads, by: 'type', minAgeSec: 120 } },
+    { key: 'desktop', type: 'tidy', a: { folder: app.desktop, by: 'type', minAgeSec: 120 } },
+    { key: 'cleanup', type: 'cleanup', a: { folder: app.downloads, days: 30 } },
+  ];
+  const add = (p: (typeof presets)[number]) => setEdit({ id: crypto.randomUUID(), type: p.type, enabled: true, ...p.a });
 
   return (
     <div className="screen">
       <div className="page" data-testid="auto">
-        <div className="tool-head">
-          <button className="btn icon ghost" onClick={goHome} aria-label={t('common.back')}>
+        <div className="tool-hero">
+          <button className="btn icon ghost back" onClick={goHome} aria-label={t('common.back')}>
             <IconArrowLeft size={18} />
           </button>
-          <span className="tool-ic" style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(140deg,#f59e0b,#ef4444)' }}>
-            <IconBolt size={18} />
-          </span>
           <div className="grow">
-            <h2>{t('auto.title')}</h2>
-            <div className="small muted">{t('auto.sub')}</div>
+            <div className="row" style={{ gap: 10 }}>
+              <span className="tool-ic" style={{ width: 30, height: 30, borderRadius: 9, background: 'linear-gradient(140deg,#f59e0b,#ef4444)' }}>
+                <IconBolt size={17} />
+              </span>
+              <h1>{t('auto.title')}</h1>
+            </div>
+            <p className="muted hero-desc">{t('auto.sub')}</p>
+          </div>
+          <div className="hero-art">
+            <ArtAuto />
           </div>
         </div>
 
+        <h2 className="h-section">{t('auto.ideas')}</h2>
         <div className="auto-add">
-          {(['year', 'tidy', 'cleanup'] as const).map((type) => {
-            const I = TYPE_ICON[type];
+          {presets.map((p) => {
+            const I = TYPE_ICON[p.type];
             return (
-              <button key={type} className="tile" onClick={() => add(type)} data-testid={`auto-add-${type}`}>
-                <span className="tool-ic" style={{ width: 40, height: 40, borderRadius: 11, background: TYPE_COLOR[type] }}>
-                  <I size={21} strokeWidth={2} />
+              <button key={p.key} className="pro-row" onClick={() => add(p)} data-testid={`auto-add-${p.key}`}>
+                <span className="tool-ic" style={{ width: 38, height: 38, borderRadius: 11, background: TYPE_COLOR[p.type] }}>
+                  <I size={20} strokeWidth={2} />
                 </span>
-                <span className="tile-text">
-                  <b>
-                    <IconPlus size={13} /> {t(`auto.${type}` as TKey)}
-                  </b>
-                  <span>{t(`auto.${type}.desc` as TKey)}</span>
+                <span className="grow">
+                  <b>{t(`auto.preset.${p.key}` as TKey)}</b>
+                  <span>{t(`auto.preset.${p.key}.desc` as TKey)}</span>
                 </span>
+                <IconPlus size={16} className="faint" />
               </button>
             );
           })}
         </div>
 
-        <div className="section-label">{t('auto.mine')}</div>
+        <h2 className="h-section">{t('auto.mine')}</h2>
         {!list.length ? (
           <div className="card pad muted">{t('auto.none')}</div>
         ) : (
@@ -112,7 +119,7 @@ export function AutoScreen() {
           </div>
         )}
 
-        <div className="section-label">{t('auto.background')}</div>
+        <h2 className="h-section">{t('auto.background')}</h2>
         <Group>
           <Row label={t('auto.tray')} desc={t(window.api.platform === 'darwin' ? 'auto.tray.mac' : 'auto.tray.win')}>
             <Switch on={bg.tray} onChange={(v) => updateSettings({ background: { tray: v } })} />
@@ -271,13 +278,13 @@ export function HistoryScreen() {
   return (
     <div className="screen">
       <div className="page" data-testid="history">
-        <div className="tool-head">
-          <button className="btn icon ghost" onClick={goHome} aria-label={t('common.back')}>
+        <div className="tool-hero compact" style={{ marginBottom: 16 }}>
+          <button className="btn icon ghost back" onClick={goHome} aria-label={t('common.back')}>
             <IconArrowLeft size={18} />
           </button>
           <div className="grow">
-            <h2>{t('history.title')}</h2>
-            <div className="small muted">{t('history.sub')}</div>
+            <h1>{t('history.title')}</h1>
+            <p className="muted hero-desc">{t('history.sub')}</p>
           </div>
           {items.length > 0 && (
             <button className="btn sm ghost" onClick={() => call('history:clear').then(refreshHistory)}>
