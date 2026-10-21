@@ -7,7 +7,7 @@ import { TASK_ART } from './art';
 import { Dialog } from './ui';
 import {
   IconArrowLeft, IconFolderTree, IconRename, IconImage, IconCalendar, IconSend, IconReceive, IconSort, IconPdf, IconCopies, IconFlatten, IconBroom, IconPie,
-  IconList, IconHash, IconFilePlus, IconFolderPlus, IconLink, IconFolder, IconFile, IconVideo, IconMusic, IconArchive, IconClose, IconPlus, IconCheck, IconUndo,
+  IconList, IconFolder, IconFile, IconVideo, IconMusic, IconArchive, IconClose, IconPlus, IconCheck, IconUndo,
   IconHelp, IconDown, IconUpload,
 } from '../icons';
 
@@ -25,10 +25,6 @@ const TOOL_ICONS: Record<ToolId, typeof IconFolder> = {
   empty: IconBroom,
   size: IconPie,
   list: IconList,
-  hash: IconHash,
-  newfile: IconFilePlus,
-  newfolder: IconFolderPlus,
-  copypath: IconLink,
 };
 
 export function ToolIcon({ id, size = 40 }: { id: ToolId; size?: number }) {
@@ -73,7 +69,11 @@ export function useThumb(path: string | undefined, size = 160) {
   useEffect(() => {
     if (!path) return;
     const k = `${path}@${size}`;
-    if (!thumbCache.has(k)) thumbCache.set(k, call<string | null>('fs:thumb', path, size).catch(() => null));
+    if (!thumbCache.has(k)) {
+      // Speicher klein halten: nur die letzten 400 Vorschaubilder merken
+      if (thumbCache.size > 400) thumbCache.delete(thumbCache.keys().next().value!);
+      thumbCache.set(k, call<string | null>('fs:thumb', path, size).catch(() => null));
+    }
     let alive = true;
     thumbCache.get(k)!.then((s) => alive && setSrc(s));
     return () => {

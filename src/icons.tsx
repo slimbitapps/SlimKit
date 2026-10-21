@@ -64,10 +64,7 @@ export const IconFlatten = base(<><path d="M4 4h16M4 20h16" /><path d="M12 7v10m
 export const IconBroom = base(<><path d="M19 3 11 11" /><path d="M11.5 10.5 6 12l-3 9 9-3 1.5-5.5z" /><path d="M7 17l2-2" /></>);
 export const IconPie = base(<><path d="M12 3a9 9 0 1 0 9 9h-9z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15z" /></>);
 export const IconList = base(<><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" fill="currentColor" /><circle cx="4.5" cy="12" r="1" fill="currentColor" /><circle cx="4.5" cy="18" r="1" fill="currentColor" /></>);
-export const IconHash = base(<path d="M5 9h15M4 15h15M10 3 8 21M16 3l-2 18" />);
-export const IconFilePlus = base(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14h6" /></>);
 export const IconFolderPlus = base(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M12 10v6M9 13h6" /></>);
-export const IconLink = base(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>);
 export const IconHistory = base(<><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>);
 export const IconUndo = base(<><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>);
 export const IconBolt = base(<path d="M13 2 4 14h7l-1 8 9-12h-7z" />);

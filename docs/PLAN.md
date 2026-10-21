@@ -25,7 +25,7 @@ Rechtsklick → **SlimKit** → ein kleines Fenster zeigt passende Schnellaktion
 **Rückgängig** für fast jede Aktion, Übertragung per QR-Code ohne App und ohne Internet,
 Automatik („jedes Jahr die Ordnerstruktur fortführen“), Einfach- und Expertenmodus.
 
-## Version 1.0
+## Version 1.0 (13 Werkzeuge – bewusst nur, was Finder und Explorer nicht können)
 
 **Ordner**
 - Ordnerstruktur kopieren (ohne Dateien) – Jahreszahl wird automatisch ersetzt (2025 → 2026),
@@ -37,7 +37,7 @@ Automatik („jedes Jahr die Ordnerstruktur fortführen“), Einfach- und Expert
 **Dateien**
 - Mehrere umbenennen (Nummerieren, Text ersetzen, Datum voranstellen, Groß/klein, Vorlage mit Platzhaltern)
 - Datum ändern (festes Datum, Aufnahmedatum aus Foto/Video, aus dem Dateinamen, Zeitverschiebung)
-- Doppelte Dateien finden · Prüfsumme · Pfad kopieren · Neue Textdatei · Neuer Ordner mit Auswahl
+- Doppelte Dateien finden
 
 **Bilder & PDF**
 - Bilder verkleinern / vergrößern / umwandeln (JPG, PNG, WebP; Zielgröße in KB; entfernt Standortdaten)

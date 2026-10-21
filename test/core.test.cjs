@@ -302,12 +302,12 @@ test('Start-Argumente auswerten', () => {
 });
 
 test('Windows-Registry-Datei und Mac-Skript', () => {
-  const reg = winRegFile({ launcher: ['C:\\Users\\Max\\AppData\\Local\\Programs\\SlimKit\\SlimKit.exe'], icon: 'C:\\x\\SlimKit.exe', actions: ['open', 'structure', 'newfile'], labels: { open: 'SlimKit öffnen …', structure: 'Ordnerstruktur "kopieren"', newfile: 'Neue Textdatei' } });
+  const reg = winRegFile({ launcher: ['C:\\Users\\Max\\AppData\\Local\\Programs\\SlimKit\\SlimKit.exe'], icon: 'C:\\x\\SlimKit.exe', actions: ['open', 'structure', 'receive'], labels: { open: 'SlimKit öffnen …', structure: 'Ordnerstruktur "kopieren"', receive: 'Vom Handy empfangen' } });
   assert.ok(reg.startsWith('Windows Registry Editor Version 5.00'));
   assert.ok(reg.includes('[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\SlimKit\\shell\\02structure\\command]'));
   assert.ok(reg.includes('@="\\"C:\\\\Users\\\\Max\\\\AppData\\\\Local\\\\Programs\\\\SlimKit\\\\SlimKit.exe\\" --action=structure \\"%1\\""'));
   assert.ok(reg.includes('"MUIVerb"="Ordnerstruktur \\"kopieren\\""'));
-  assert.ok(reg.includes('Background\\shell\\SlimKit\\shell\\02newfile\\command]\r\n@="\\"C:\\\\Users\\\\Max\\\\AppData\\\\Local\\\\Programs\\\\SlimKit\\\\SlimKit.exe\\" --action=newfile \\"%V\\""'));
+  assert.ok(reg.includes('Background\\shell\\SlimKit\\shell\\02receive\\command]\r\n@="\\"C:\\\\Users\\\\Max\\\\AppData\\\\Local\\\\Programs\\\\SlimKit\\\\SlimKit.exe\\" --action=receive \\"%V\\""'));
   assert.ok(!reg.includes('*\\shell\\SlimKit\\shell\\02structure'), 'Ordnerstruktur nicht bei Dateien');
   const sh = macScript(['/Applications/SlimKit.app/Contents/MacOS/SlimKit'], '/Applications/SlimKit.app', 'send');
   assert.ok(sh.includes("pgrep -xq 'SlimKit'"));

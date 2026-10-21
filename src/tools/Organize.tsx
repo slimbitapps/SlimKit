@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { t, fmtSize, fmtNum, type TKey } from '../i18n';
 import { call, toast, refreshHistory } from '../store';
-import { Picker, ToolFrame, ToolPage, Step, Choices, Done, Empty, Busy, useFiles, errText, KindIcon, Thumb } from '../components/kit';
+import { Picker, ToolFrame, ToolPage, Step, Choices, Done, Empty, Busy, errText, KindIcon, Thumb } from '../components/kit';
 import { Group, Row, Seg, Switch } from '../components/ui';
 import { IconFlatten, IconBroom, IconCopies, IconPie, IconList, IconFolder, IconTrash } from '../icons';
 import { basename } from '../paths';
@@ -453,115 +453,6 @@ export function ListTool({ paths: initial }: { paths: string[] }) {
               }}
             >
               {t('list.apply')}
-            </button>
-          </>
-        )
-      }
-    />
-  );
-}
-
-// ------------------------------------------------------------------ Prüfsumme
-export function HashTool({ paths: initial }: { paths: string[] }) {
-  const [paths, setPaths] = useState(initial);
-  const files = useFiles(paths, {});
-  const [algo, setAlgo] = useState<'sha256' | 'sha1' | 'md5'>('sha256');
-  const [res, setRes] = useState<{ path: string; hash: string }[] | null>(null);
-  const [compare, setCompare] = useState('');
-  useEffect(() => {
-    setRes(null);
-    if (files?.length) call<{ path: string; hash: string }[]>('hash:compute', files.slice(0, 200).map((f) => f.path), algo).then(setRes);
-  }, [files, algo]);
-  const cmp = compare.trim().toLowerCase();
-  return (
-    <ToolFrame
-      id="hash"
-      side={
-        <>
-          <Picker mode="files" paths={paths} onChange={setPaths} label={t('pick.what')} />
-          <Group>
-            <Row label={t('hash.algo')}>
-              <Seg value={algo} onChange={setAlgo} options={[['sha256', 'SHA-256'], ['sha1', 'SHA-1'], ['md5', 'MD5']]} />
-            </Row>
-          </Group>
-          <label className="field">
-            <span>{t('hash.compare')}</span>
-            <input className="input mono" value={compare} onChange={(e) => setCompare(e.target.value)} placeholder="e3b0c442…" />
-          </label>
-        </>
-      }
-      main={
-        !paths.length ? (
-          <Empty text={t('hash.empty')} />
-        ) : !res ? (
-          <Busy />
-        ) : (
-          <div className="table">
-            {res.map((r) => (
-              <div className={`trow hash-row ${cmp && (r.hash === cmp ? 'match' : 'nomatch')}`} key={r.path}>
-                <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="ellipsis">{basename(r.path)}</div>
-                  <div className="mono small faint ellipsis">{r.hash}</div>
-                </div>
-                {cmp && <span className={`badge ${r.hash === cmp ? 'success' : 'warn'}`}>{r.hash === cmp ? t('hash.match') : t('hash.nomatch')}</span>}
-                <button className="btn xs ghost" onClick={() => (call('clipboard:write', r.hash), toast(t('common.copied')))}>
-                  {t('common.copy')}
-                </button>
-              </div>
-            ))}
-          </div>
-        )
-      }
-    />
-  );
-}
-
-// ------------------------------------------------------------------ Schnell: Neue Datei, Neuer Ordner mit Auswahl, Pfad kopieren
-export function QuickTool({ id, paths: initial }: { id: 'newfile' | 'newfolder' | 'copypath'; paths: string[] }) {
-  const [paths, setPaths] = useState(initial);
-  const [name, setName] = useState(id === 'newfile' ? t('quick.newfile.name') : id === 'newfolder' ? t('quick.newfolder.name') : '');
-  const [res, setRes] = useState('');
-  const files = useFiles(paths, false);
-  const dirOnly = id === 'newfile';
-  if (res) return <ToolFrame id={id} side={null} main={<Done text={t(`quick.${id}.done` as TKey)} reveal={res} />} />;
-  return (
-    <ToolFrame
-      id={id}
-      side={<Picker mode={dirOnly ? 'dir' : 'files'} paths={paths} onChange={setPaths} label={dirOnly ? t('quick.newfile.where') : t('pick.what')} />}
-      main={
-        id === 'copypath' ? (
-          <div className="preview">
-            <pre className="code-box mono small">{paths.join('\n') || '…'}</pre>
-          </div>
-        ) : (
-          <div className="card pad" style={{ maxWidth: 420 }}>
-            <label className="field">
-              <span>{t('common.name')}</span>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            </label>
-            {id === 'newfolder' && files && <p className="small muted">{t('quick.newfolder.hint', { n: files.length })}</p>}
-          </div>
-        )
-      }
-      foot={
-        paths.length > 0 && (
-          <>
-            <div className="spacer" />
-            <button
-              className="btn primary lg"
-              onClick={async () => {
-                if (id === 'copypath') {
-                  await call('quick:copypath', paths);
-                  toast(t('common.copied'));
-                  return;
-                }
-                const dir = files?.[0];
-                const r = id === 'newfile' ? await call<string>('quick:newfile', dir?.isDir ? dir.path : dir?.dir, name) : await call<string>('quick:newfolder', paths, name);
-                setRes(r);
-                refreshHistory();
-              }}
-            >
-              {t(`quick.${id}.apply` as TKey)}
             </button>
           </>
         )

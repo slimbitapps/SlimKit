@@ -308,7 +308,7 @@ export function HistoryScreen() {
   );
 }
 
-const TOOL_IDS = new Set(['structure', 'rename', 'images', 'dates', 'send', 'receive', 'sort', 'pdf', 'dupes', 'flatten', 'empty', 'size', 'list', 'hash', 'newfile', 'newfolder', 'copypath']);
+const TOOL_IDS = new Set(['structure', 'rename', 'images', 'dates', 'send', 'receive', 'sort', 'pdf', 'dupes', 'flatten', 'empty', 'size', 'list']);
 function HistoryRow({ h }: { h: HistoryItem }) {
   const [busy, setBusy] = useState(false);
   return (

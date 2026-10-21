@@ -2,7 +2,7 @@ import type { TKey } from './i18n';
 
 export type ToolId =
   | 'structure' | 'rename' | 'images' | 'dates' | 'send' | 'receive' | 'sort' | 'pdf'
-  | 'dupes' | 'flatten' | 'empty' | 'size' | 'list' | 'hash' | 'newfile' | 'newfolder' | 'copypath';
+  | 'dupes' | 'flatten' | 'empty' | 'size' | 'list';
 
 export type Group = 'folders' | 'files' | 'media' | 'transfer';
 
@@ -30,10 +30,6 @@ export const TOOLS: ToolDef[] = [
   { id: 'flatten', group: 'folders', simple: false, color: '#ec4899', fits: (s) => (s.dirs === 1 ? 3 : 0) },
   { id: 'empty', group: 'folders', simple: false, color: '#84cc16', fits: (s) => (s.dirs ? 3 : 0) },
   { id: 'list', group: 'folders', simple: false, color: '#06b6d4', fits: (s) => (s.dirs === 1 ? 3 : 0) },
-  { id: 'hash', group: 'files', simple: false, color: '#8b5cf6', fits: (s) => (s.files ? 2 : 0) },
-  { id: 'newfolder', group: 'files', simple: false, color: '#f59e0b', fits: (s) => (s.files + s.dirs > 1 ? 4 : 0) },
-  { id: 'newfile', group: 'files', simple: false, color: '#94a3b8', fits: (s) => (s.dirs === 1 ? 2 : 0) },
-  { id: 'copypath', group: 'files', simple: false, color: '#78716c', fits: (s) => (s.files || s.dirs ? 2 : 0) },
 ];
 
 export const GROUPS: Group[] = ['folders', 'files', 'media', 'transfer'];

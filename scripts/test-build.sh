@@ -10,7 +10,7 @@ ARCH=$(uname -m); [ "$ARCH" = arm64 ] && A=--arm64 || A=--x64
 npm ci --no-audit --no-fund >/dev/null
 npm run typecheck >/dev/null
 npm test >/dev/null
-npx vite build >/dev/null
+npm run build >/dev/null
 rm -rf release test-build && mkdir test-build
 CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dmg $A -c.mac.identity=null --publish never >/dev/null
 npx electron-builder --win zip --x64 --publish never >/dev/null

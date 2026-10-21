@@ -95,7 +95,7 @@ function GeneralTab() {
   );
 }
 
-const MENU_IDS = ['open', 'structure', 'rename', 'images', 'send', 'receive', 'dates', 'sort', 'pdf', 'copypath', 'newfile'];
+const MENU_IDS = ['open', 'structure', 'rename', 'images', 'send', 'receive', 'dates', 'sort', 'pdf'];
 function MenuTab() {
   const menu = useStore((s) => s.menu);
   const actions = useStore((s) => s.settings.menu.actions);

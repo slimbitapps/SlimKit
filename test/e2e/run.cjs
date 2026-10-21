@@ -36,7 +36,8 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'slimkit-e2e-'));
   const services = path.join(userData, 'Services');
   // Testordner mit echten Bildern (schöne Farbverläufe statt eigener Fotos)
-  const work = path.join(fs.realpathSync(os.tmpdir()), `slimkit-e2e-files-${Date.now()}`);
+  const workRoot = path.join(fs.realpathSync(os.tmpdir()), `slimkit-e2e-files-${Date.now()}`);
+  const work = path.join(workRoot, L('Bilder', 'Pictures')); // so heißt der Ordner auch auf den Store-Bildern
   const photos = path.join(work, L('Fotos 2025', 'Photos 2025'));
   const months = L(['2025-01 Januar', '2025-02 Februar', '2025-03 März', '2025-07 Urlaub Italien', '2025-12 Weihnachten'], ['2025-01 January', '2025-02 February', '2025-03 March', '2025-07 Italy trip', '2025-12 Christmas']);
   for (const m of months) fs.mkdirSync(path.join(photos, m), { recursive: true });
@@ -266,10 +267,6 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
   await phone2.close();
   await win.click('[data-testid="back"]');
 
-  // ---------------------------------------------------------------- Pfad kopieren (ohne Fenster-Wechsel)
-  await launch('copypath', [path.join(italy, imgNames[0])]);
-  await waitFor(async () => (await app.evaluate(({ clipboard }) => clipboard.readText())) === path.join(italy, imgNames[0]), 4000, 'Pfad kopiert');
-
   // ---------------------------------------------------------------- Automatik "Neues Jahr"
   await app.evaluate((_e, parent) => global.__slimkit.setSettings({ automations: [{ id: 'y1', type: 'year', enabled: true, parent, month: 1, day: 1, lastYear: 2025 }, { id: 't1', type: 'tidy', enabled: false, folder: parent, by: 'type', minAgeSec: 60 }] }), school);
   await win.click('[data-testid="open-auto"]');
@@ -311,7 +308,7 @@ const ls = (d) => fs.readdirSync(d).filter((n) => !n.startsWith('.')).sort();
   // ---------------------------------------------------------------- Ergebnis
   const relevant = errors.filter((e) => !/favicon|ERR_ABORTED|Autofill/.test(e));
   await app.close();
-  fs.rmSync(work, { recursive: true, force: true });
+  fs.rmSync(workRoot, { recursive: true, force: true });
   if (relevant.length) {
     console.error('Fehler in der Konsole:\n' + relevant.join('\n'));
     process.exit(1);

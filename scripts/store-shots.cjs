@@ -17,14 +17,18 @@ const OUT = path.join(ROOT, 'marketing', 'screenshots');
 
 // [Dateiname, Laptop-Bild, Handy-Bild, Überschrift DE, Unterzeile DE, Überschrift EN, Unterzeile EN]
 const SLIDES = [
-  ['1-hero', '10-home-qr', '20-phone-remote', 'Dein Handy als Präsentations-Fernbedienung', 'QR-Code scannen und los – keine App auf dem Handy nötig.', 'Your phone as a presentation remote', 'Scan the QR code and go – no app on your phone.'],
-  ['2-remote', '11-home-connected', '20-phone-remote', 'Großer Weiter-Knopf und Live-Vorschau', 'Du siehst am Handy, was das Publikum sieht.', 'Big Next button and live preview', 'See on your phone what the audience sees.'],
-  ['3-laser', null, '22-phone-laser', 'Laserpointer ohne Laserpointer', 'Auf die Vorschau tippen – der rote Punkt erscheint auf dem Beamer.', 'A laser pointer without a laser pointer', 'Touch the preview – the red dot appears on the projector.'],
-  ['4-spotlight', null, '23-phone-spotlight', 'Spotlight lenkt den Blick', 'Eine Stelle bleibt hell, der Rest wird dunkel.', 'Spotlight guides every eye', 'One spot stays bright, the rest goes dark.'],
-  ['5-timer', '12-home-timer', '24-phone-timer', 'Timer, den nur du siehst', 'Der Bildschirm blinkt kurz vor dem Ende – unauffällig.', 'A timer only you can see', 'The screen flashes before time runs out – quietly.'],
-  ['6-hotspot', '17-hotspot-guide', null, 'Klappt auch im Schul-WLAN', 'Mit dem Handy-Hotspot – die App erklärt jeden Schritt.', 'Works on school Wi-Fi, too', 'With your phone’s hotspot – the app explains every step.'],
-  ['7-secure', '13-approval', '27-phone-wait-approval', 'Sicher: Nur dein Handy steuert', 'Einmal-Code im QR, signierte Befehle, weitere Geräte nur mit Zustimmung.', 'Secure: only your phone is in control', 'One-time code, signed commands, extra devices only with your OK.'],
-  ['8-any-app', '18-home-light', '26-phone-landscape', 'PowerPoint, Keynote, Google Slides, PDF', 'Hell oder dunkel, hoch oder quer – kostenlos für Windows & Mac.', 'PowerPoint, Keynote, Google Slides, PDF', 'Light or dark, portrait or landscape – free for Windows & Mac.'],
+  ['1-hero', '10-home', null, 'Die fehlenden Rechtsklick-Werkzeuge', 'Für Finder und Explorer – kostenlos für Mac und Windows.', 'The missing right-click tools', 'For Finder and Explorer – free for Mac and Windows.'],
+  ['2-structure', '20-structure', null, 'Ordnerstruktur kopieren – ohne Dateien', '„Fotos 2025“ wird zu „Fotos 2026“. Nur die Ordner, keine Fotos.', 'Copy a folder structure – without files', '“Photos 2025” becomes “Photos 2026”. Only folders, no photos.'],
+  ['3-yearly', '21-structure-done', null, 'Jedes Jahr von selbst', 'Am 1. Januar ist die neue Ordnung schon da.', 'Every year by itself', 'On 1 January your new folders are already there.'],
+  ['4-rightclick', '11-home-selection', null, 'Rechtsklick – und los', 'SlimKit zeigt die passenden Werkzeuge für deine Auswahl.', 'Right-click – and go', 'SlimKit shows the right tools for your selection.'],
+  ['5-images', '50-images', null, 'Fotos kleiner machen', 'Für E-Mail, WhatsApp oder Formulare. Die Originale bleiben.', 'Make photos smaller', 'For email, WhatsApp or forms. The originals stay.'],
+  ['6-send', '62-send-connected', '61-phone-send', 'Aufs Handy – ohne App', 'QR-Code scannen und laden. Kein Kabel, keine Cloud.', 'To your phone – no app', 'Scan the QR code and download. No cable, no cloud.'],
+  ['7-receive', '65-receive', '64-phone-received', 'Fotos vom Handy holen', 'Am Handy auswählen – sie landen direkt im Ordner.', 'Get photos from your phone', 'Pick them on the phone – they land right in the folder.'],
+  ['8-rename', '30-rename', null, 'Viele Dateien umbenennen', 'Aus IMG_4821 wird „Urlaub 01“ – mit Vorschau.', 'Rename many files', 'IMG_4821 becomes “Holiday 01” – with a preview.'],
+  ['9-sort', '56-sort', null, 'Fotos nach Datum ordnen', 'Automatisch in Ordner nach Monat oder Jahr.', 'Sort photos by date', 'Automatically into folders by month or year.'],
+  ['10-auto', '70-auto', null, 'Automatik', 'Downloads aufräumen, neue Jahres-Ordner – von selbst.', 'Automations', 'Tidy Downloads, new year folders – by itself.'],
+  ['11-history', '75-history', null, 'Alles rückgängig', 'Jede Änderung steht im Verlauf – ein Klick zurück.', 'Undo everything', 'Every change is in the history – one click back.'],
+  ['12-dark', '86-structure-dark', null, 'Hell oder dunkel', 'Einfach- und Expertenmodus, Deutsch und Englisch.', 'Light or dark', 'Simple and expert mode, English and German.'],
 ];
 
 function html(lang, [, laptop, phone, hDe, sDe, hEn, sEn]) {
@@ -36,7 +40,7 @@ function html(lang, [, laptop, phone, hDe, sDe, hEn, sEn]) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
   * { box-sizing: border-box; }
   body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: radial-gradient(1100px 700px at 85% -10%, rgba(255,77,109,.45), transparent 60%), radial-gradient(900px 600px at -10% 110%, rgba(255,122,89,.35), transparent 60%), #111216; color: #fff; }
+    background: radial-gradient(1100px 700px at 85% -10%, rgba(45,212,191,.40), transparent 60%), radial-gradient(900px 600px at -10% 110%, rgba(59,130,246,.35), transparent 60%), #111216; color: #fff; }
   .head { position: absolute; left: 110px; top: 90px; width: ${phoneOnly ? 760 : 1700}px; }
   .brand { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 28px; color: rgba(255,255,255,.85); margin-bottom: 30px; }
   .brand img { width: 52px; height: 52px; }
@@ -52,7 +56,7 @@ function html(lang, [, laptop, phone, hDe, sDe, hEn, sEn]) {
   .phone.l img { border-radius: 32px; }
   .phone.p.crop { height: ${phoneOnly ? 900 : 760}px; overflow: hidden; }
   </style></head><body>
-  <div class="head"><div class="brand"><img src="file://${path.join(ROOT, 'brand', 'slimclick.png')}">SlimClick</div><h1>${h}</h1><p>${s}</p></div>
+  <div class="head"><div class="brand"><img src="file://${path.join(ROOT, 'brand', 'slimkit.png')}">SlimKit</div><h1>${h}</h1><p>${s}</p></div>
   ${laptop ? `<div class="laptop"><img src="${raw(laptop)}"></div>` : ''}
   ${phone ? `<div class="phone ${landscape ? 'l' : 'p crop'}"><img src="${raw(phone)}"></div>` : ''}
   </body></html>`;
@@ -65,7 +69,7 @@ app.whenReady().then(async () => {
   const win = new BrowserWindow({ width: 1920, height: 1080, show: false, useContentSize: true, webPreferences: { offscreen: true } });
   for (const lang of ['de', 'en']) {
     for (const slide of SLIDES) {
-      const tmp = path.join(os.tmpdir(), `slimclick-shot-${lang}-${slide[0]}.html`);
+      const tmp = path.join(os.tmpdir(), `slimkit-shot-${lang}-${slide[0]}.html`);
       fs.writeFileSync(tmp, html(lang, slide));
       await win.loadFile(tmp);
       await new Promise((r) => setTimeout(r, 400));

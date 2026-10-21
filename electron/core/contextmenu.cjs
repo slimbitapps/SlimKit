@@ -20,12 +20,10 @@ const MENU_ACTIONS = [
   { id: 'dates', on: ['file', 'dir'], mac: false },
   { id: 'sort', on: ['dir'], mac: false },
   { id: 'pdf', on: ['file'], mac: false },
-  { id: 'copypath', on: ['file', 'dir'], mac: false },
-  { id: 'newfile', on: ['dir', 'bg'], mac: false },
 ];
 const ACTION_IDS = new Set([
   ...MENU_ACTIONS.map((a) => a.id),
-  'flatten', 'empty', 'dupes', 'size', 'list', 'hash', 'newfolder',
+  'flatten', 'empty', 'dupes', 'size', 'list',
 ]);
 
 /**

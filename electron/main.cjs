@@ -216,55 +216,12 @@ async function deliverLaunch() {
   const l = pendingLaunch;
   pendingLaunch = null;
   if (!l) return;
-  // Schnelle Aktionen ohne Fenster
-  if (l.action === 'copypath') {
-    clipboard.writeText(l.paths.join(isWin ? '\r\n' : '\n'));
-    notify(t('copied.title'), l.paths.length === 1 ? l.paths[0] : t('copied.many', { n: l.paths.length }));
-    return quitIfIdle();
-  }
-  if (l.action === 'newfile') {
-    const dir = l.paths[0] && fs.statSync(l.paths[0]).isDirectory() ? l.paths[0] : path.dirname(l.paths[0] || os.homedir());
-    const f = await quickNewFile(dir);
-    shell.showItemInFolder(f);
-    return quitIfIdle();
-  }
-  if (l.action === 'newfolder') {
-    const r = await quickNewFolder(l.paths);
-    if (r) shell.showItemInFolder(r);
-    return quitIfIdle();
-  }
   const ready = win && !win.isDestroyed() && !win.webContents.isLoading();
   showWindow();
   launchQueue.push(l);
   if (ready) send('launch', l);
 }
 const launchQueue = [];
-function quitIfIdle() {
-  if (!win && !keepInBackground()) setTimeout(() => app.quit(), 300);
-}
-
-async function quickNewFile(dir, name) {
-  const f = uniquePath(path.join(dir, safeName(name || t('new.file'))));
-  await fsp.writeFile(f, '', { flag: 'wx' });
-  history.add({ tool: 'newfile', title: path.basename(f), count: 1, ops: [{ t: 'create', path: f }] });
-  return f;
-}
-async function quickNewFolder(paths, name) {
-  if (!paths.length) return null;
-  const parent = path.dirname(paths[0]);
-  const dir = uniquePath(path.join(parent, safeName(name || t('new.folder'))));
-  await fsp.mkdir(dir);
-  const ops = [{ t: 'mkdir', path: dir }];
-  for (const p of paths) {
-    if (path.dirname(p) !== parent) continue;
-    const to = path.join(dir, path.basename(p));
-    await fsp.rename(p, to);
-    ops.push({ t: 'move', from: p, to });
-  }
-  history.add({ tool: 'newfolder', title: path.basename(dir), count: paths.length, ops });
-  return dir;
-}
-
 // ------------------------------------------------------------------ Rechtsklick-Menü einrichten
 function menuLabels() {
   return Object.fromEntries(cm.MENU_ACTIONS.map((a) => [a.id, t('menu.' + a.id)]));
@@ -487,7 +444,7 @@ handle('settings:set', (partial) => {
   }
   if (partial && (partial.background || partial.automations)) {
     updateTray();
-    runner.rewatch();
+    syncRunner();
     applyAutostart();
   }
   return settings.public();
@@ -687,15 +644,6 @@ handle('list:export', async (root, format) => {
   history.add({ tool: 'list', title: path.basename(out), count: 1, ops: [{ t: 'create', path: out }] });
   return out;
 });
-handle('hash:compute', async (paths, algo) => {
-  const out = [];
-  for (const p of paths) out.push({ path: p, hash: await organize.hashFile(p, 0, algo || 'sha256') });
-  return out;
-});
-handle('quick:newfile', (dir, name) => quickNewFile(dir, name));
-handle('quick:newfolder', (paths, name) => quickNewFolder(paths, name));
-handle('quick:copypath', (paths) => clipboard.writeText(paths.join(isWin ? '\r\n' : '\n')));
-
 // Übertragung
 handle('transfer:start', (o) => startTransfer(o));
 handle('transfer:stop', () => stopTransfer());
@@ -725,6 +673,11 @@ const runner = new AutomationRunner({
   t,
   log,
 });
+/** Automatik nur laufen lassen, wenn wirklich eine eingeschaltet ist (spart Akku) */
+function syncRunner() {
+  if (settings.data.automations.some((a) => a.enabled)) runner.start();
+  else runner.stop();
+}
 handle('auto:preview', (a) => runner.preview(a));
 handle('auto:run', async (id) => {
   const r = await runner.run(id);
@@ -774,7 +727,7 @@ if (isTest) {
     settings: () => settings.public(),
     setSettings: (partial) => {
       settings.update(partial);
-      runner.rewatch();
+      syncRunner();
       send('settings', settings.public());
     },
     trashDir: () => TEST_TRASH,
@@ -793,7 +746,7 @@ app.whenReady().then(async () => {
   else if (!hidden || !keepInBackground()) createWindow();
   else if (isMac) app.dock?.hide();
   updateTray();
-  runner.start();
+  syncRunner();
   refreshMenu();
   applyAutostart();
 });

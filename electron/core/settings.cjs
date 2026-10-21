@@ -7,7 +7,7 @@ const DEFAULTS = {
   version: 1,
   onboarded: false,
   prefs: { lang: '', theme: 'system', mode: 'simple' },
-  menu: { installed: false, actions: ['open', 'structure', 'rename', 'images', 'send', 'receive', 'dates', 'sort', 'pdf', 'copypath', 'newfile'] },
+  menu: { installed: false, actions: ['open', 'structure', 'rename', 'images', 'send', 'receive', 'dates', 'sort', 'pdf'] },
   background: { tray: true, autostart: false },
   images: { size: 'email', customBy: 'px', maxSide: 1920, percent: 50, format: 'same', quality: 82, targetKB: 500, output: 'folder' },
   structure: { includeExt: [], step: 1 },

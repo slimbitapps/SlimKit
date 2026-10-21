@@ -9,7 +9,7 @@ import { ImagesTool } from './tools/Images';
 import { DatesTool } from './tools/Dates';
 import { SendTool, ReceiveTool } from './tools/Transfer';
 import { PdfTool } from './tools/Pdf';
-import { SortTool, FlattenTool, EmptyTool, DupesTool, SizeTool, ListTool, HashTool, QuickTool } from './tools/Organize';
+import { SortTool, FlattenTool, EmptyTool, DupesTool, SizeTool, ListTool } from './tools/Organize';
 import { t } from './i18n';
 import { IconUndo, IconCheck, IconAlert } from './icons';
 
@@ -73,12 +73,6 @@ function ToolView({ tool, paths }: { tool: string; paths: string[] }) {
       return <SizeTool paths={paths} />;
     case 'list':
       return <ListTool paths={paths} />;
-    case 'hash':
-      return <HashTool paths={paths} />;
-    case 'newfile':
-    case 'newfolder':
-    case 'copypath':
-      return <QuickTool id={tool} paths={paths} />;
     default:
       return null;
   }

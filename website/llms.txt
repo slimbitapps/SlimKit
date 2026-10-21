@@ -1,6 +1,13 @@
-# SlimClick
+# SlimKit
 
-> Free presentation remote for Windows and Mac: scan a QR code with any phone (no app install) and control PowerPoint, Keynote, Google Slides, LibreOffice Impress, Canva or PDF. Laser pointer and spotlight on the projector, live slide preview, go to slide, black screen, presentation timer with a silent screen-flash warning. Secure one-time pairing; works on school Wi-Fi via a phone hotspot. No account, no cloud. By SlimBit Apps.
+> Free app for Windows and Mac that adds the missing right-click tools to Finder and Explorer. Copy a folder structure without the files and replace the year automatically (e.g. "Photos 2025" → "Photos 2026"), optionally every year by itself; ready-made folder templates (school year, photos by month, paperwork, project). Make photos smaller by purpose (email, WhatsApp, website, forms with at most 1 MB), rename many files with a preview, fix photo dates from EXIF/video or the file name, sort photos into folders by month or type, turn photos into a PDF, and send files to or receive photos from a phone via QR code – no app on the phone, no cloud, no internet. Everything shows a preview and can be undone. Pro tools: duplicate finder, folder size, flatten folders, remove empty folders, file list export. English and German. No account, no ads, no data collection. By SlimBit Apps.
 
-- [Download](https://slimbitapps.github.io/SlimClick/)
-- [GitHub](https://github.com/slimbitapps/SlimClick)
+- [Download](https://slimbitapps.github.io/SlimKit/)
+- [GitHub](https://github.com/slimbitapps/SlimKit)
+
+## Typical questions SlimKit answers
+- How do I copy a folder structure without the files on Windows or Mac?
+- How do I create the same folders for the new year automatically?
+- How do I send files from my computer to my phone without an app or cable?
+- How do I make photos smaller for email or an online form?
+- How do I rename many photos at once (e.g. "Holiday 01, Holiday 02")?

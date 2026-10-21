@@ -5,13 +5,13 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "vite build && electron .",
-    "build": "vite build",
+    "build": "vite build && node scripts/bundle-main.cjs",
     "typecheck": "tsc -p .",
     "test": "node --test test/*.test.cjs",
     "test:e2e": "vite build && node test/e2e/run.cjs",
     "icons": "electron scripts/make-icons.cjs",
-    "dist:win": "vite build && electron-builder --win",
-    "dist:mac": "vite build && electron-builder --mac"
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "author": "SlimBit Apps",
   "license": "UNLICENSED",
@@ -21,6 +21,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.9.0",
     "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "playwright-core": "^1.56.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -37,10 +38,25 @@
   "build": {
     "appId": "app.slimbit.slimkit",
     "productName": "SlimKit",
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["dist/**", "electron/**", "package.json", "!**/*.map"],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "!**/*.map",
+      "!node_modules/**"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "SlimKit-Windows-portable.${ext}"
     },
     "nsis": {
@@ -50,14 +66,25 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "SlimKit",
-      "installerLanguages": ["de_DE", "en_US"],
+      "installerLanguages": [
+        "de_DE",
+        "en_US"
+      ],
       "multiLanguageInstaller": true,
       "deleteAppDataOnUninstall": false,
       "include": "build/installer.nsh",
       "artifactName": "SlimKit-Setup.${ext}"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -73,14 +100,37 @@
       "title": "SlimKit",
       "background": "build/background.png",
       "iconSize": 110,
-      "window": { "width": 660, "height": 420 },
+      "window": {
+        "width": 660,
+        "height": 420
+      },
       "contents": [
-        { "x": 170, "y": 215, "type": "file" },
-        { "x": 490, "y": 215, "type": "link", "path": "/Applications" }
+        {
+          "x": 170,
+          "y": 215,
+          "type": "file"
+        },
+        {
+          "x": 490,
+          "y": 215,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "compression": "maximum",
-    "electronLanguages": ["de", "en", "en-US", "en-GB"]
+    "electronLanguages": [
+      "de",
+      "en",
+      "en-US",
+      "en-GB"
+    ],
+    "extraMetadata": {
+      "main": "dist/main.cjs"
+    }
   },
-  "repository": { "type": "git", "url": "https://github.com/slimbitapps/SlimKit.git" }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slimbitapps/SlimKit.git"
+  }
 }
