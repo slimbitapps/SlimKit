@@ -295,9 +295,10 @@ test('Duplikate, Größe, Dateiliste, Prüfsumme', async () => {
 // ------------------------------------------------------------------ Rechtsklick
 test('Start-Argumente auswerten', () => {
   const ex = () => true;
-  assert.deepEqual(parseLaunch(['/app/SlimKit', '--action=structure', '/Users/a/Fotos 2025'], { exists: ex }), { action: 'structure', paths: ['/Users/a/Fotos 2025'] });
-  assert.deepEqual(parseLaunch(['/Applications/SlimKit.app/Contents/MacOS/SlimKit', '/x/a.jpg', '--allow-file-access', '--action=images', '/x/b.jpg'], { exists: ex }), { action: 'images', paths: ['/x/a.jpg', '/x/b.jpg'] });
-  assert.deepEqual(parseLaunch(['/x/electron', '/repo', '--action=hack', '/x/a'], { exists: ex, skip: ['/repo'] }), { action: 'open', paths: ['/x/a'] });
+  const P = (p) => path.resolve(p); // unter Windows wird z. B. /x/a zu D:\x\a
+  assert.deepEqual(parseLaunch(['/app/SlimKit', '--action=structure', P('/Users/a/Fotos 2025')], { exists: ex }), { action: 'structure', paths: [P('/Users/a/Fotos 2025')] });
+  assert.deepEqual(parseLaunch(['/Applications/SlimKit.app/Contents/MacOS/SlimKit', P('/x/a.jpg'), '--allow-file-access', '--action=images', P('/x/b.jpg')], { exists: ex }), { action: 'images', paths: [P('/x/a.jpg'), P('/x/b.jpg')] });
+  assert.deepEqual(parseLaunch(['/x/electron', P('/repo'), '--action=hack', P('/x/a')], { exists: ex, skip: [P('/repo')] }), { action: 'open', paths: [P('/x/a')] });
   assert.deepEqual(parseLaunch(['/x/electron'], { exists: ex }), { action: null, paths: [] });
 });
 
@@ -360,6 +361,9 @@ test('Automatik: Aufräumen und alte Dateien', async () => {
   await runner.run('t');
   assert.deepEqual(ls(d), ['Bilder', 'Dokumente', 'laden.crdownload']);
   const c = await cleanupCandidates({ folder: d, days: 30 });
-  // Dateien wurden gerade erst verschoben → nicht älter als 30 Tage? birthtime bleibt alt; mtime alt → kandidat
-  assert.ok(c.some((x) => x.path.endsWith('laden.crdownload')));
+  // Zählt ab dem letzten Ändern ODER Hinzufügen: Windows setzt beim Anlegen ein neues Erstelldatum
+  const st = fs.statSync(path.join(d, 'laden.crdownload'));
+  const isOld = Date.now() - Math.max(st.mtimeMs, st.birthtimeMs) > 30 * 86400000;
+  assert.equal(c.some((x) => x.path.endsWith('laden.crdownload')), isOld);
+  assert.ok(!c.some((x) => x.path.endsWith('Bilder')), 'Unterordner bleiben');
 });
