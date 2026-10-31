@@ -8,7 +8,7 @@ const CSP =
   "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'self' mediastream: blob:";
 // Lokale Spracherkennung: Modelle von Hugging Face laden, WebAssembly ausführen
 const ENGINE_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
   "connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co blob: data:";
 
 const ORT = ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
