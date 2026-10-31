@@ -1627,7 +1627,8 @@ pub fn cli_selftest(model: &str) -> i32 {
     let silence = vec![3i16; 16_000 * 3];
     let st = eng.transcribe(key, false, &silence, "de", "", false).map(|t| t.text).unwrap_or_default();
     ok &= st.is_empty();
-    println!("{}", json!({ "ok": ok, "model": key, "results": results, "silence": st }));
+    let system = whisper_rs::print_system_info().to_string();
+    println!("{}", json!({ "ok": ok, "model": key, "cores": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0), "system": system, "results": results, "silence": st }));
     if ok {
         0
     } else {

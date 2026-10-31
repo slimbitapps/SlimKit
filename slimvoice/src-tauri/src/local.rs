@@ -211,9 +211,10 @@ impl Engine {
         let mut state = ctx.create_state().map_err(|e| SvError::new("local", format!("{e:?}")))?;
         let strategy = if best { SamplingStrategy::BeamSearch { beam_size: 3, patience: -1.0 } } else { SamplingStrategy::Greedy { best_of: 1 } };
         let mut p = FullParams::new(strategy);
-        // Hälfte der Kerne: kaum langsamer, aber der Rechner bleibt ruhig und bedienbar
+        // Fast alle Kerne, aber einen Rest frei lassen, damit der Rechner bedienbar bleibt
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-        p.set_n_threads((cores / 2).clamp(2, 8) as i32);
+        let threads = if cores <= 4 { cores } else { (cores - 2).min(8) };
+        p.set_n_threads(threads.max(1) as i32);
         let lang = if language.is_empty() { "auto" } else { language };
         p.set_language(Some(lang));
         p.set_translate(false);
