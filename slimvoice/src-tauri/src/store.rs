@@ -287,7 +287,7 @@ mod tests {
         );
         assert_eq!(s.s("/dictation/mode"), "live");
         assert_eq!(s.s("/dictation/tempo"), "balanced");
-        assert_eq!(s.s("/services/stt/provider"), "local");
+        assert_eq!(s.s("/services/stt/provider"), if cfg!(target_os = "macos") { "apple" } else { "local" });
     }
 
     #[test]
