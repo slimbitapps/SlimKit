@@ -17,7 +17,8 @@ use std::sync::{Arc, Mutex};
 
 pub type BoxFut<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 /// (Audio, Modell, Hinweis) → Text
-pub type TranscribeFn = Arc<dyn Fn(Vec<i16>, String, String) -> BoxFut<Result<String, SvError>> + Send + Sync>;
+pub type TranscribeFn =
+    Arc<dyn Fn(Vec<i16>, String, String) -> BoxFut<Result<String, SvError>> + Send + Sync>;
 /// (System, Nutzer) → Text
 pub type CompleteFn = Arc<dyn Fn(String, String) -> BoxFut<Result<String, SvError>> + Send + Sync>;
 pub type InsertFn = Arc<dyn Fn(String) -> BoxFut<()> + Send + Sync>;
@@ -48,7 +49,8 @@ pub struct AiCfg {
 /// Wörter und Ersetzungen des Profils kommen zu den allgemeinen dazu.
 pub fn ai_for_app(settings: &Value, app: &str) -> (AiCfg, Option<String>) {
     use crate::store::Get;
-    let reps = |v: &Value| -> Vec<Replacement> { serde_json::from_value(v.clone()).unwrap_or_default() };
+    let reps =
+        |v: &Value| -> Vec<Replacement> { serde_json::from_value(v.clone()).unwrap_or_default() };
     let mut ai = AiCfg {
         level: settings.s("/ai/level"),
         style: settings.s("/ai/style"),
@@ -64,7 +66,10 @@ pub fn ai_for_app(settings: &Value, app: &str) -> (AiCfg, Option<String>) {
     if a.is_empty() {
         return (ai, None);
     }
-    let profiles = settings["ai"]["profiles"].as_array().cloned().unwrap_or_default();
+    let profiles = settings["ai"]["profiles"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let found = profiles.iter().find(|p| {
         let m = p["match"].as_str().unwrap_or("").trim().to_lowercase();
         !m.is_empty() && a.contains(&m)
@@ -80,8 +85,13 @@ pub fn ai_for_app(settings: &Value, app: &str) -> (AiCfg, Option<String>) {
     set("level", &mut ai.level);
     set("style", &mut ai.style);
     set("translateTo", &mut ai.translate_to);
-    if let Some(v) = p["customInstruction"].as_str().filter(|v| !v.trim().is_empty()) {
-        ai.custom_instruction = format!("{} {}", ai.custom_instruction, v).trim().to_string();
+    if let Some(v) = p["customInstruction"]
+        .as_str()
+        .filter(|v| !v.trim().is_empty())
+    {
+        ai.custom_instruction = format!("{} {}", ai.custom_instruction, v)
+            .trim()
+            .to_string();
     }
     ai.vocabulary.extend(p.list("/vocabulary"));
     ai.replacements.extend(reps(&p["replacements"]));
@@ -136,7 +146,16 @@ pub struct Outcome {
 
 impl Session {
     pub fn new(id: u64, cfg: Cfg, models: Models, deps: Deps) -> Arc<Self> {
-        Arc::new(Self { id, cfg, models, deps, inner: Arc::new(Mutex::new(Inner::default())), flush: Arc::new(tokio::sync::Mutex::new(())), pending: Mutex::new(Vec::new()), cancelled: Arc::new(AtomicBool::new(false)) })
+        Arc::new(Self {
+            id,
+            cfg,
+            models,
+            deps,
+            inner: Arc::new(Mutex::new(Inner::default())),
+            flush: Arc::new(tokio::sync::Mutex::new(())),
+            pending: Mutex::new(Vec::new()),
+            cancelled: Arc::new(AtomicBool::new(false)),
+        })
     }
 
     pub fn cancel(&self) {
@@ -154,11 +173,22 @@ impl Session {
     }
 
     fn clean(&self, text: &str) -> String {
-        local_cleanup(text, &CleanupOpts { lang: &self.cfg.language, remove_fillers: self.cfg.ai.remove_fillers, voice_commands: self.cfg.ai.voice_commands, replacements: &self.cfg.ai.replacements })
+        local_cleanup(
+            text,
+            &CleanupOpts {
+                lang: &self.cfg.language,
+                remove_fillers: self.cfg.ai.remove_fillers,
+                voice_commands: self.cfg.ai.voice_commands,
+                replacements: &self.cfg.ai.replacements,
+            },
+        )
     }
 
     fn prompt(&self, context: &str) -> String {
-        stt_prompt(&self.cfg.ai.vocabulary, if self.cfg.ai.use_context { context } else { "" })
+        stt_prompt(
+            &self.cfg.ai.vocabulary,
+            if self.cfg.ai.use_context { context } else { "" },
+        )
     }
 
     /// KI-Korrektur; bei Fehler oder unplausibler Antwort bleibt der Originaltext
@@ -167,7 +197,15 @@ impl Session {
             return text;
         }
         let ai = &self.cfg.ai;
-        let p = build_correction(&CorrectionArgs { text: &text, level: &ai.level, style: &ai.style, vocabulary: &ai.vocabulary, context: if ai.use_context { context } else { "" }, translate_to: &ai.translate_to, custom_instruction: &ai.custom_instruction });
+        let p = build_correction(&CorrectionArgs {
+            text: &text,
+            level: &ai.level,
+            style: &ai.style,
+            vocabulary: &ai.vocabulary,
+            context: if ai.use_context { context } else { "" },
+            translate_to: &ai.translate_to,
+            custom_instruction: &ai.custom_instruction,
+        });
         match (self.deps.complete)(p.system, p.user).await {
             Ok(out) => {
                 let out = clean_model_output(&out);
@@ -217,7 +255,13 @@ impl Session {
 
     async fn live(self: Arc<Self>, idx: usize, pcm: Vec<i16>) {
         let ctx = self.inner.lock().unwrap().inserted.clone();
-        let text = match (self.deps.transcribe)(pcm, self.models.stt_main.clone(), self.prompt(&ctx)).await {
+        let text = match (self.deps.transcribe)(
+            pcm,
+            self.models.stt_main.clone(),
+            self.prompt(&ctx),
+        )
+        .await
+        {
             Ok(raw) => {
                 let c = self.clean(&raw);
                 self.correct(c, &ctx).await
@@ -237,7 +281,9 @@ impl Session {
             let piece = {
                 let mut g = self.inner.lock().unwrap();
                 let n = g.next_insert;
-                let Some(text) = g.live_results.remove(&n) else { break };
+                let Some(text) = g.live_results.remove(&n) else {
+                    break;
+                };
                 g.next_insert += 1;
                 if text.is_empty() || self.is_cancelled() {
                     continue;
@@ -256,7 +302,8 @@ impl Session {
 
     async fn preview(self: Arc<Self>, idx: usize, pcm: Vec<i16>) {
         let ctx = self.preview_text(Some(idx));
-        match (self.deps.transcribe)(pcm, self.models.stt_preview.clone(), self.prompt(&ctx)).await {
+        match (self.deps.transcribe)(pcm, self.models.stt_preview.clone(), self.prompt(&ctx)).await
+        {
             Ok(raw) => {
                 let c = self.clean(&raw);
                 self.inner.lock().unwrap().previews.insert(idx, c);
@@ -267,7 +314,9 @@ impl Session {
                 g.previews.insert(idx, String::new());
                 drop(g);
                 if e.code == "no_key" || e.code == "auth" || e.code == "local_missing" {
-                    (self.deps.emit)(json!({ "type": "error", "code": e.code, "message": e.message }));
+                    (self.deps.emit)(
+                        json!({ "type": "error", "code": e.code, "message": e.message }),
+                    );
                 }
             }
         }
@@ -301,14 +350,29 @@ impl Session {
         if self.cfg.mode == "live" {
             self.wait_pending().await;
             let t = self.inner.lock().unwrap().inserted.trim().to_string();
-            return Ok(Outcome { text: t.clone(), raw: t });
+            return Ok(Outcome {
+                text: t.clone(),
+                raw: t,
+            });
         }
-        let chunks: Vec<Vec<i16>> = self.inner.lock().unwrap().chunks.iter().flatten().cloned().collect();
+        let chunks: Vec<Vec<i16>> = self
+            .inner
+            .lock()
+            .unwrap()
+            .chunks
+            .iter()
+            .flatten()
+            .cloned()
+            .collect();
         if chunks.is_empty() || self.is_cancelled() {
-            return Ok(Outcome { text: String::new(), raw: String::new() });
+            return Ok(Outcome {
+                text: String::new(),
+                raw: String::new(),
+            });
         }
         let mut raw = String::new();
-        let can_reuse = (self.cfg.mode == "preview" || self.models.pipeline) && self.models.stt_preview == self.models.stt_main;
+        let can_reuse = (self.cfg.mode == "preview" || self.models.pipeline)
+            && self.models.stt_preview == self.models.stt_main;
         if can_reuse {
             self.wait_pending().await;
             if !self.inner.lock().unwrap().failed_preview {
@@ -319,9 +383,18 @@ impl Session {
             let mut failed: Option<SvError> = None;
             for group in group_chunks(&chunks, self.models.max_seconds.max(30)) {
                 if self.is_cancelled() {
-                    return Ok(Outcome { text: String::new(), raw: String::new() });
+                    return Ok(Outcome {
+                        text: String::new(),
+                        raw: String::new(),
+                    });
                 }
-                match (self.deps.transcribe)(concat_pcm(&group, 300), self.models.stt_main.clone(), self.prompt(&raw)).await {
+                match (self.deps.transcribe)(
+                    concat_pcm(&group, 300),
+                    self.models.stt_main.clone(),
+                    self.prompt(&raw),
+                )
+                .await
+                {
                     Ok(part) => {
                         let c = self.clean(&part);
                         let piece = join_segment(&raw, &c);
@@ -344,11 +417,17 @@ impl Session {
             }
         }
         if self.is_cancelled() {
-            return Ok(Outcome { text: String::new(), raw });
+            return Ok(Outcome {
+                text: String::new(),
+                raw,
+            });
         }
         let mut text = self.correct(raw.clone(), "").await;
         if self.is_cancelled() {
-            return Ok(Outcome { text: String::new(), raw });
+            return Ok(Outcome {
+                text: String::new(),
+                raw,
+            });
         }
         if !text.is_empty() && self.cfg.trailing_space && !text.ends_with(char::is_whitespace) {
             text.push(' ');
@@ -356,7 +435,10 @@ impl Session {
         if !text.is_empty() {
             (self.deps.insert)(text.clone()).await;
         }
-        Ok(Outcome { text: text.trim().to_string(), raw })
+        Ok(Outcome {
+            text: text.trim().to_string(),
+            raw,
+        })
     }
 }
 
@@ -372,9 +454,25 @@ mod tests {
         llm: Arc<Mutex<Vec<String>>>,
     }
 
-    fn session(mode: &str, stt: impl Fn(usize, &str) -> Result<String, SvError> + Send + Sync + 'static, llm: Option<fn(&str) -> Result<String, SvError>>, ai: AiCfg, models: Models) -> (Arc<Session>, Rec) {
-        let rec = Rec { inserted: Default::default(), events: Default::default(), stt: Default::default(), llm: Default::default() };
-        let (ins, ev, sc, lc) = (rec.inserted.clone(), rec.events.clone(), rec.stt.clone(), rec.llm.clone());
+    fn session(
+        mode: &str,
+        stt: impl Fn(usize, &str) -> Result<String, SvError> + Send + Sync + 'static,
+        llm: Option<fn(&str) -> Result<String, SvError>>,
+        ai: AiCfg,
+        models: Models,
+    ) -> (Arc<Session>, Rec) {
+        let rec = Rec {
+            inserted: Default::default(),
+            events: Default::default(),
+            stt: Default::default(),
+            llm: Default::default(),
+        };
+        let (ins, ev, sc, lc) = (
+            rec.inserted.clone(),
+            rec.events.clone(),
+            rec.stt.clone(),
+            rec.llm.clone(),
+        );
         let stt = Arc::new(stt);
         let counter = Arc::new(Mutex::new(0usize));
         let deps = Deps {
@@ -396,7 +494,14 @@ mod tests {
                 let r = match llm {
                     Some(f) => f(&user),
                     None => {
-                        let d = user.split("<dictation>\n").nth(1).unwrap_or("").split("\n</dictation>").next().unwrap_or("").to_uppercase();
+                        let d = user
+                            .split("<dictation>\n")
+                            .nth(1)
+                            .unwrap_or("")
+                            .split("\n</dictation>")
+                            .next()
+                            .unwrap_or("")
+                            .to_uppercase();
                         Ok(d)
                     }
                 };
@@ -408,37 +513,91 @@ mod tests {
             }),
             emit: Arc::new(move |e| ev.lock().unwrap().push(e)),
         };
-        let cfg = Cfg { mode: mode.into(), language: "de".into(), trailing_space: true, ai };
+        let cfg = Cfg {
+            mode: mode.into(),
+            language: "de".into(),
+            trailing_space: true,
+            ai,
+        };
         (Session::new(1, cfg, models, deps), rec)
     }
     fn models() -> Models {
-        Models { stt_main: "main".into(), stt_preview: "preview".into(), max_seconds: 600, llm_model: "llm".into(), pipeline: false }
+        Models {
+            stt_main: "main".into(),
+            stt_preview: "preview".into(),
+            max_seconds: 600,
+            llm_model: "llm".into(),
+            pipeline: false,
+        }
     }
     fn ai(level: &str) -> AiCfg {
-        AiCfg { level: level.into(), remove_fillers: true, voice_commands: true, use_context: true, ..Default::default() }
+        AiCfg {
+            level: level.into(),
+            remove_fillers: true,
+            voice_commands: true,
+            use_context: true,
+            ..Default::default()
+        }
     }
 
     #[tokio::test]
     async fn live_reihenfolge_bleibt() {
-        let (s, r) = session("live", |n, _| Ok(["erster satz.", "zweiter satz."][n].to_string()), None, ai("light"), models());
+        let (s, r) = session(
+            "live",
+            |n, _| Ok(["erster satz.", "zweiter satz."][n].to_string()),
+            None,
+            ai("light"),
+            models(),
+        );
         s.add_segment(0, vec![1; 1600]);
         s.add_segment(1, vec![1; 1600]);
         let o = s.finish().await.unwrap();
-        assert_eq!(*r.inserted.lock().unwrap(), vec!["ERSTER SATZ. ", "ZWEITER SATZ. "]);
+        assert_eq!(
+            *r.inserted.lock().unwrap(),
+            vec!["ERSTER SATZ. ", "ZWEITER SATZ. "]
+        );
         assert_eq!(o.text, "ERSTER SATZ. ZWEITER SATZ.");
     }
 
     #[tokio::test]
     async fn preview_dann_beste_qualitaet() {
-        let (s, r) = session("preview", |_, m| Ok(if m == "preview" { "vorschau".into() } else { "hallo äh welt neuer absatz zweite zeile".into() }), None, ai("light"), models());
+        let (s, r) = session(
+            "preview",
+            |_, m| {
+                Ok(if m == "preview" {
+                    "vorschau".into()
+                } else {
+                    "hallo äh welt neuer absatz zweite zeile".into()
+                })
+            },
+            None,
+            ai("light"),
+            models(),
+        );
         s.add_segment(0, vec![1; 1600]);
         s.add_segment(1, vec![1; 1600]);
         tokio::time::sleep(Duration::from_millis(60)).await;
-        assert!(r.events.lock().unwrap().iter().any(|e| e["text"] == "Vorschau vorschau"));
+        assert!(r
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| e["text"] == "Vorschau vorschau"));
         let o = s.finish().await.unwrap();
         assert_eq!(o.raw, "Hallo welt\n\nZweite zeile");
-        assert_eq!(*r.inserted.lock().unwrap(), vec!["HALLO WELT\n\nZWEITE ZEILE "]);
-        assert_eq!(r.stt.lock().unwrap().iter().filter(|m| *m == "main").count(), 1);
+        assert_eq!(
+            *r.inserted.lock().unwrap(),
+            vec!["HALLO WELT\n\nZWEITE ZEILE "]
+        );
+        assert_eq!(
+            r.stt
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|m| *m == "main")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -459,16 +618,41 @@ mod tests {
 
     #[tokio::test]
     async fn ki_antwortet_statt_korrigiert() {
-        let (s, r) = session("batch", |_, _| Ok("wie spät ist es".into()), Some(|_| Ok("Es ist 14:30 Uhr. Brauchst du sonst noch etwas? Ich helfe dir gerne weiter bei allem.".into())), ai("light"), models());
+        let (s, r) = session(
+            "batch",
+            |_, _| Ok("wie spät ist es".into()),
+            Some(|_| {
+                Ok("Es ist 14:30 Uhr. Brauchst du sonst noch etwas? Ich helfe dir gerne weiter bei allem.".into())
+            }),
+            ai("light"),
+            models(),
+        );
         s.add_segment(0, vec![1; 1600]);
         s.finish().await.unwrap();
         assert_eq!(*r.inserted.lock().unwrap(), vec!["Wie spät ist es "]);
-        assert!(r.events.lock().unwrap().iter().any(|e| e["code"] == "ai_implausible"));
+        assert!(r
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| e["code"] == "ai_implausible"));
     }
 
     #[tokio::test]
     async fn fehler_dann_vorschau_als_ersatz() {
-        let (s, r) = session("preview", |_, m| if m == "main" { Err(SvError::new("server", "down")) } else { Ok("aus der vorschau".into()) }, Some(|_| Err(SvError::new("quota", "x"))), ai("light"), models());
+        let (s, r) = session(
+            "preview",
+            |_, m| {
+                if m == "main" {
+                    Err(SvError::new("server", "down"))
+                } else {
+                    Ok("aus der vorschau".into())
+                }
+            },
+            Some(|_| Err(SvError::new("quota", "x"))),
+            ai("light"),
+            models(),
+        );
         s.add_segment(0, vec![1; 1600]);
         s.finish().await.unwrap();
         assert_eq!(*r.inserted.lock().unwrap(), vec!["Aus der vorschau "]);

@@ -1,1 +1,3 @@
-fn main() { slimvoice_lib::run() }
+fn main() {
+    slimvoice_lib::run()
+}

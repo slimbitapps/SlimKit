@@ -17,9 +17,24 @@ pub struct ModelInfo {
 
 /// Quantisierte Modelle: deutlich kleiner, kaum schlechter
 pub const MODELS: [ModelInfo; 3] = [
-    ModelInfo { key: "base", file: "ggml-base-q5_1.bin", size_mb: 60, ram_gb: 2 },
-    ModelInfo { key: "small", file: "ggml-small-q5_1.bin", size_mb: 190, ram_gb: 4 },
-    ModelInfo { key: "turbo", file: "ggml-large-v3-turbo-q5_0.bin", size_mb: 575, ram_gb: 6 },
+    ModelInfo {
+        key: "base",
+        file: "ggml-base-q5_1.bin",
+        size_mb: 60,
+        ram_gb: 2,
+    },
+    ModelInfo {
+        key: "small",
+        file: "ggml-small-q5_1.bin",
+        size_mb: 190,
+        ram_gb: 4,
+    },
+    ModelInfo {
+        key: "turbo",
+        file: "ggml-large-v3-turbo-q5_0.bin",
+        size_mb: 575,
+        ram_gb: 6,
+    },
 ];
 
 pub fn model(key: &str) -> &'static ModelInfo {
@@ -27,7 +42,8 @@ pub fn model(key: &str) -> &'static ModelInfo {
 }
 
 fn model_url(file: &str) -> String {
-    let base = std::env::var("SLIMVOICE_MODEL_URL").unwrap_or_else(|_| "https://huggingface.co/ggerganov/whisper.cpp/resolve/main".into());
+    let base = std::env::var("SLIMVOICE_MODEL_URL")
+        .unwrap_or_else(|_| "https://huggingface.co/ggerganov/whisper.cpp/resolve/main".into());
     format!("{}/{file}", base.trim_end_matches('/'))
 }
 
@@ -47,7 +63,11 @@ impl Engine {
     pub fn new(dir: PathBuf) -> Self {
         // whisper.cpp schreibt sonst sehr viel ins Terminal
         whisper_rs::install_logging_hooks();
-        Self { dir, ctx: Mutex::new(None), cancel: AtomicBool::new(false) }
+        Self {
+            dir,
+            ctx: Mutex::new(None),
+            cancel: AtomicBool::new(false),
+        }
     }
 
     pub fn path(&self, key: &str) -> PathBuf {
@@ -55,7 +75,9 @@ impl Engine {
     }
 
     pub fn is_downloaded(&self, key: &str) -> bool {
-        std::fs::metadata(self.path(key)).map(|m| m.len() > 1_000_000).unwrap_or(false)
+        std::fs::metadata(self.path(key))
+            .map(|m| m.len() > 1_000_000)
+            .unwrap_or(false)
     }
 
     pub fn downloaded_sizes(&self) -> serde_json::Map<String, serde_json::Value> {
@@ -80,12 +102,18 @@ impl Engine {
         let m = model(key);
         std::fs::create_dir_all(&self.dir).map_err(|e| SvError::new("local", e.to_string()))?;
         let part = self.dir.join(format!("{}.part", m.file));
-        let res = reqwest::Client::new().get(model_url(m.file)).send().await.map_err(|e| SvError::new("network", e.to_string()))?;
+        let res = reqwest::Client::new()
+            .get(model_url(m.file))
+            .send()
+            .await
+            .map_err(|e| SvError::new("network", e.to_string()))?;
         if !res.status().is_success() {
             return Err(SvError::new("network", format!("HTTP {}", res.status())));
         }
         let total = res.content_length().unwrap_or(m.size_mb as u64 * 1_000_000);
-        let mut file = tokio::fs::File::create(&part).await.map_err(|e| SvError::new("local", e.to_string()))?;
+        let mut file = tokio::fs::File::create(&part)
+            .await
+            .map_err(|e| SvError::new("local", e.to_string()))?;
         let mut stream = res.bytes_stream();
         let mut loaded = 0u64;
         let mut last = 0u64;
@@ -97,14 +125,18 @@ impl Engine {
                 return Err(SvError::new("cancelled", "cancelled"));
             }
             let chunk = chunk.map_err(|e| SvError::new("network", e.to_string()))?;
-            file.write_all(&chunk).await.map_err(|e| SvError::new("local", e.to_string()))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| SvError::new("local", e.to_string()))?;
             loaded += chunk.len() as u64;
             if loaded - last > 1_000_000 || loaded == total {
                 last = loaded;
                 progress(loaded, total);
             }
         }
-        file.flush().await.map_err(|e| SvError::new("local", e.to_string()))?;
+        file.flush()
+            .await
+            .map_err(|e| SvError::new("local", e.to_string()))?;
         drop(file);
         if loaded < 1_000_000 {
             let _ = std::fs::remove_file(&part);
@@ -127,7 +159,11 @@ impl Engine {
     }
 
     pub fn loaded(&self) -> Option<(String, bool)> {
-        self.ctx.lock().unwrap().as_ref().map(|(k, g, _)| (k.clone(), *g))
+        self.ctx
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|(k, g, _)| (k.clone(), *g))
     }
 
     /// Modell in den Speicher laden (blockiert – im Hintergrund-Thread aufrufen)
@@ -146,19 +182,32 @@ impl Engine {
         params.use_gpu = gpu;
         params.flash_attn = gpu;
         let path = self.path(key);
-        let ctx = WhisperContext::new_with_params(&path.to_string_lossy(), params).map_err(|e| SvError::new("local", format!("{e:?}")))?;
+        let ctx = WhisperContext::new_with_params(&path.to_string_lossy(), params)
+            .map_err(|e| SvError::new("local", format!("{e:?}")))?;
         *g = Some((key.to_string(), gpu, ctx));
         Ok(())
     }
 
     /// Sprache → Text (blockiert). language: „de“, „en“ … oder „auto“; prompt: Fachbegriffe/Zusammenhang.
-    pub fn transcribe(&self, key: &str, gpu: bool, pcm: &[i16], language: &str, prompt: &str, best: bool) -> Result<Transcript, SvError> {
+    pub fn transcribe(
+        &self,
+        key: &str,
+        gpu: bool,
+        pcm: &[i16],
+        language: &str,
+        prompt: &str,
+        best: bool,
+    ) -> Result<Transcript, SvError> {
         let t0 = std::time::Instant::now();
         let audio: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
         // fast nur Stille → gar nicht erst rechnen (verhindert erfundene Sätze)
         let rms = (audio.iter().map(|v| v * v).sum::<f32>() / audio.len().max(1) as f32).sqrt();
         if audio.len() < 3200 || rms < 0.002 {
-            return Ok(Transcript { text: String::new(), ms: 0, gpu });
+            return Ok(Transcript {
+                text: String::new(),
+                ms: 0,
+                gpu,
+            });
         }
         // Whisper braucht mindestens ~1 s – kurze Abschnitte mit Stille auffüllen
         let mut audio = audio;
@@ -167,13 +216,31 @@ impl Engine {
         }
         self.load(key, gpu)?;
         let g = self.ctx.lock().unwrap();
-        let (_, used_gpu, ctx) = g.as_ref().ok_or_else(|| SvError::new("local", "not loaded"))?;
-        let mut state = ctx.create_state().map_err(|e| SvError::new("local", format!("{e:?}")))?;
-        let strategy = if best { SamplingStrategy::BeamSearch { beam_size: 5, patience: -1.0 } } else { SamplingStrategy::Greedy { best_of: 1 } };
+        let (_, used_gpu, ctx) = g
+            .as_ref()
+            .ok_or_else(|| SvError::new("local", "not loaded"))?;
+        let mut state = ctx
+            .create_state()
+            .map_err(|e| SvError::new("local", format!("{e:?}")))?;
+        let strategy = if best {
+            SamplingStrategy::BeamSearch {
+                beam_size: 5,
+                patience: -1.0,
+            }
+        } else {
+            SamplingStrategy::Greedy { best_of: 1 }
+        };
         let mut p = FullParams::new(strategy);
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 8);
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .clamp(1, 8);
         p.set_n_threads(threads as i32);
-        let lang = if language.is_empty() { "auto" } else { language };
+        let lang = if language.is_empty() {
+            "auto"
+        } else {
+            language
+        };
         p.set_language(Some(lang));
         p.set_translate(false);
         p.set_no_context(true);
@@ -192,7 +259,9 @@ impl Engine {
         if !prompt.is_empty() {
             p.set_initial_prompt(prompt);
         }
-        state.full(p, &audio).map_err(|e| SvError::new("local", format!("{e:?}")))?;
+        state
+            .full(p, &audio)
+            .map_err(|e| SvError::new("local", format!("{e:?}")))?;
         let mut text = String::new();
         for i in 0..state.full_n_segments() {
             if let Some(seg) = state.get_segment(i) {
@@ -205,7 +274,11 @@ impl Engine {
                 }
             }
         }
-        Ok(Transcript { text: text.trim().to_string(), ms: t0.elapsed().as_millis(), gpu: *used_gpu })
+        Ok(Transcript {
+            text: text.trim().to_string(),
+            ms: t0.elapsed().as_millis(),
+            gpu: *used_gpu,
+        })
     }
 }
 

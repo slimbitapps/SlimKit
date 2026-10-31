@@ -26,13 +26,21 @@ enum Saved {
 
 impl Inserter {
     pub fn new() -> Self {
-        Self { test_file: std::env::var("SLIMVOICE_OUTPUT").ok().filter(|s| !s.is_empty()).map(PathBuf::from), lock: Mutex::new(()) }
+        Self {
+            test_file: std::env::var("SLIMVOICE_OUTPUT")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from),
+            lock: Mutex::new(()),
+        }
     }
 
     fn shortcut(c: char) -> Result<(), String> {
         let mut e = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
         e.key(MOD, Direction::Press).map_err(|e| e.to_string())?;
-        let r = e.key(Key::Unicode(c), Direction::Click).map_err(|e| e.to_string());
+        let r = e
+            .key(Key::Unicode(c), Direction::Click)
+            .map_err(|e| e.to_string());
         e.key(MOD, Direction::Release).map_err(|e| e.to_string())?;
         r
     }
@@ -62,7 +70,11 @@ impl Inserter {
             return Ok(());
         }
         if let Some(f) = &self.test_file {
-            let mut file = std::fs::OpenOptions::new().create(true).append(true).open(f).map_err(|e| e.to_string())?;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(f)
+                .map_err(|e| e.to_string())?;
             return file.write_all(text.as_bytes()).map_err(|e| e.to_string());
         }
         // Finger von den Tasten des Kürzels runter lassen
@@ -75,7 +87,11 @@ impl Inserter {
                 e.text(text).map_err(|e| e.to_string())
             }
             _ => {
-                let saved = if restore { Some(Self::save(&mut cb)) } else { None };
+                let saved = if restore {
+                    Some(Self::save(&mut cb))
+                } else {
+                    None
+                };
                 cb.set_text(text.to_string()).map_err(|e| e.to_string())?;
                 std::thread::sleep(Duration::from_millis(30));
                 Self::shortcut('v')?;
@@ -96,9 +112,14 @@ impl Inserter {
         if self.test_file.is_some() {
             return std::env::var("SLIMVOICE_SELECTION").unwrap_or_default();
         }
-        let Ok(mut cb) = arboard::Clipboard::new() else { return String::new() };
+        let Ok(mut cb) = arboard::Clipboard::new() else {
+            return String::new();
+        };
         let saved = Self::save(&mut cb);
-        let marker = format!("\u{200b}slimvoice{}\u{200b}", chrono::Utc::now().timestamp_millis());
+        let marker = format!(
+            "\u{200b}slimvoice{}\u{200b}",
+            chrono::Utc::now().timestamp_millis()
+        );
         let _ = cb.set_text(marker.clone());
         std::thread::sleep(Duration::from_millis(150));
         if Self::shortcut('c').is_err() {
@@ -126,7 +147,9 @@ impl Inserter {
         if self.test_file.is_some() {
             return std::env::var("SLIMVOICE_FG_APP").unwrap_or_default();
         }
-        active_win_pos_rs::get_active_window().map(|w| w.app_name).unwrap_or_default()
+        active_win_pos_rs::get_active_window()
+            .map(|w| w.app_name)
+            .unwrap_or_default()
     }
 }
 

@@ -56,7 +56,9 @@ pub fn merge(base: &Value, over: &Value) -> Value {
 }
 
 pub fn read_json(path: &Path) -> Option<Value> {
-    std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok())
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
 }
 
 pub fn write_json(path: &Path, v: &Value) {
@@ -77,14 +79,21 @@ pub struct Settings {
 impl Settings {
     pub fn load(path: PathBuf) -> Self {
         let saved = read_json(&path).unwrap_or(Value::Null);
-        Self { data: merge(&defaults(), &saved), path }
+        Self {
+            data: merge(&defaults(), &saved),
+            path,
+        }
     }
     pub fn update(&mut self, partial: &Value) {
         self.data = merge(&self.data, partial);
         write_json(&self.path, &self.data);
     }
     pub fn str(&self, ptr: &str) -> String {
-        self.data.pointer(ptr).and_then(|v| v.as_str()).unwrap_or("").to_string()
+        self.data
+            .pointer(ptr)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     }
 }
 
@@ -97,7 +106,10 @@ pub trait Get {
 }
 impl Get for Value {
     fn s(&self, ptr: &str) -> String {
-        self.pointer(ptr).and_then(|v| v.as_str()).unwrap_or("").to_string()
+        self.pointer(ptr)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     }
     fn b(&self, ptr: &str) -> bool {
         self.pointer(ptr).and_then(|v| v.as_bool()).unwrap_or(false)
@@ -108,7 +120,11 @@ impl Get for Value {
     fn list(&self, ptr: &str) -> Vec<String> {
         self.pointer(ptr)
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
@@ -122,7 +138,10 @@ pub struct Secrets {
 
 fn obfuscate(data: &[u8]) -> Vec<u8> {
     let key = b"SlimBit-Apps/SlimVoice-local-key";
-    data.iter().enumerate().map(|(i, b)| b ^ key[i % key.len()]).collect()
+    data.iter()
+        .enumerate()
+        .map(|(i, b)| b ^ key[i % key.len()])
+        .collect()
 }
 
 impl Secrets {
@@ -132,7 +151,9 @@ impl Secrets {
     }
     pub fn get(&self, name: &str) -> String {
         use base64::Engine;
-        let Some(v) = self.raw.get(name).and_then(|v| v.as_str()) else { return String::new() };
+        let Some(v) = self.raw.get(name).and_then(|v| v.as_str()) else {
+            return String::new();
+        };
         base64::engine::general_purpose::STANDARD
             .decode(v)
             .ok()
@@ -146,7 +167,12 @@ impl Secrets {
             if v.is_empty() {
                 m.remove(name);
             } else {
-                m.insert(name.into(), Value::String(base64::engine::general_purpose::STANDARD.encode(obfuscate(v.as_bytes()))));
+                m.insert(
+                    name.into(),
+                    Value::String(
+                        base64::engine::general_purpose::STANDARD.encode(obfuscate(v.as_bytes())),
+                    ),
+                );
             }
         }
         write_json(&self.path, &self.raw);
@@ -163,7 +189,20 @@ impl Secrets {
             for name in m.keys() {
                 let v = self.get(name);
                 if !v.is_empty() {
-                    let hint = if v.chars().count() > 8 { format!("…{}", v.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>()) } else { String::new() };
+                    let hint = if v.chars().count() > 8 {
+                        format!(
+                            "…{}",
+                            v.chars()
+                                .rev()
+                                .take(4)
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                                .rev()
+                                .collect::<String>()
+                        )
+                    } else {
+                        String::new()
+                    };
                     keys.insert(name.clone(), json!({ "set": true, "hint": hint }));
                 }
             }
@@ -180,11 +219,17 @@ pub struct History {
 
 impl History {
     pub fn load(path: PathBuf) -> Self {
-        let items = read_json(&path).and_then(|v| v.as_array().cloned()).unwrap_or_default();
+        let items = read_json(&path)
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default();
         Self { path, items }
     }
     pub fn add(&mut self, mut entry: Value, max: usize) -> Value {
-        let id = format!("{:x}{:04x}", chrono::Utc::now().timestamp_millis(), rand::random::<u16>());
+        let id = format!(
+            "{:x}{:04x}",
+            chrono::Utc::now().timestamp_millis(),
+            rand::random::<u16>()
+        );
         entry["id"] = json!(id);
         entry["at"] = json!(chrono::Utc::now().to_rfc3339());
         self.items.insert(0, entry.clone());
@@ -211,7 +256,10 @@ mod tests {
 
     #[test]
     fn standardwerte_zusammenfuehren() {
-        let s = merge(&defaults(), &json!({ "dictation": { "mode": "live" }, "unknown": 1 }));
+        let s = merge(
+            &defaults(),
+            &json!({ "dictation": { "mode": "live" }, "unknown": 1 }),
+        );
         assert_eq!(s.s("/dictation/mode"), "live");
         assert_eq!(s.s("/dictation/tempo"), "balanced");
         assert_eq!(s.s("/services/stt/provider"), "local");
@@ -223,8 +271,13 @@ mod tests {
         let path = dir.join("secrets.json");
         let mut s = Secrets::load(path.clone());
         s.set("openai", "sk-1234567890abcd");
-        assert!(!std::fs::read_to_string(&path).unwrap().contains("sk-1234567890abcd"));
-        assert_eq!(Secrets::load(path.clone()).get("openai"), "sk-1234567890abcd");
+        assert!(!std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("sk-1234567890abcd"));
+        assert_eq!(
+            Secrets::load(path.clone()).get("openai"),
+            "sk-1234567890abcd"
+        );
         assert_eq!(s.summary()["keys"]["openai"]["hint"], "…abcd");
         s.set("openai", "");
         assert_eq!(s.get("openai"), "");

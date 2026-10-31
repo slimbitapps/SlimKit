@@ -44,8 +44,14 @@ pub fn decode_wav(bytes: &[u8]) -> Option<(Vec<f32>, u32)> {
             }
             let end = (body + size).min(bytes.len());
             let ch = channels.max(1) as usize;
-            let samples: Vec<i16> = bytes[body..end].chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect();
-            let mono = samples.chunks(ch).map(|f| f.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / ch as f32).collect();
+            let samples: Vec<i16> = bytes[body..end]
+                .chunks_exact(2)
+                .map(|c| i16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            let mono = samples
+                .chunks(ch)
+                .map(|f| f.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / ch as f32)
+                .collect();
             return Some((mono, rate));
         }
         i = body + size + (size & 1);
@@ -103,7 +109,13 @@ mod tests {
     #[test]
     fn gruppen() {
         let c = vec![vec![0i16; 16_000 * 4]; 3];
-        assert_eq!(group_chunks(&c, 9).iter().map(|g| g.len()).collect::<Vec<_>>(), vec![2, 1]);
+        assert_eq!(
+            group_chunks(&c, 9)
+                .iter()
+                .map(|g| g.len())
+                .collect::<Vec<_>>(),
+            vec![2, 1]
+        );
         assert_eq!(concat_pcm(&[vec![1; 10], vec![1; 10]], 1).len(), 36);
     }
 }

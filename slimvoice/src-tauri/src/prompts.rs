@@ -40,11 +40,18 @@ fn style_text(style: &str) -> Option<&'static str> {
 }
 
 fn vocab_line(vocab: &[String]) -> Option<String> {
-    let v: Vec<&str> = vocab.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let v: Vec<&str> = vocab
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if v.is_empty() {
         None
     } else {
-        Some(format!("Correct spellings of names, terms and abbreviations the user often uses: {}.", v.join(", ")))
+        Some(format!(
+            "Correct spellings of names, terms and abbreviations the user often uses: {}.",
+            v.join(", ")
+        ))
     }
 }
 
@@ -81,21 +88,40 @@ pub fn build_correction(a: &CorrectionArgs) -> Prompt {
         rules.push(v);
     }
     if !a.custom_instruction.trim().is_empty() {
-        rules.push(format!("Additional instruction from the user: {}", a.custom_instruction.trim()));
+        rules.push(format!(
+            "Additional instruction from the user: {}",
+            a.custom_instruction.trim()
+        ));
     }
     rules.push("Output only the final text – no quotes, no tags, no explanation. If the dictation is empty or only noise, output nothing.".to_string());
     let mut user = String::new();
     let ctx = a.context.trim();
     if !ctx.is_empty() {
-        let tail: String = ctx.chars().rev().take(600).collect::<Vec<_>>().into_iter().rev().collect();
+        let tail: String = ctx
+            .chars()
+            .rev()
+            .take(600)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         user.push_str(&format!("<text_before_cursor>\n{tail}\n</text_before_cursor>\n(for context only – do not repeat it)\n\n"));
     }
     user.push_str(&format!("<dictation>\n{}\n</dictation>", a.text));
-    Prompt { system: rules.join("\n"), user }
+    Prompt {
+        system: rules.join("\n"),
+        user,
+    }
 }
 
 /// Befehlsmodus: gesprochene Anweisung auf markierten Text anwenden – oder ohne Markierung neuen Text schreiben.
-pub fn build_command(instruction: &str, selection: &str, style: &str, vocabulary: &[String], custom: &str) -> Prompt {
+pub fn build_command(
+    instruction: &str,
+    selection: &str,
+    style: &str,
+    vocabulary: &[String],
+    custom: &str,
+) -> Prompt {
     let mut rules = vec![
         "You are a writing tool inside a dictation app. The user gave a spoken instruction.".to_string(),
         if selection.is_empty() {
@@ -114,24 +140,41 @@ pub fn build_command(instruction: &str, selection: &str, style: &str, vocabulary
         rules.push(v);
     }
     if !custom.trim().is_empty() {
-        rules.push(format!("Additional preference of the user: {}", custom.trim()));
+        rules.push(format!(
+            "Additional preference of the user: {}",
+            custom.trim()
+        ));
     }
     let mut user = format!("<instruction>\n{instruction}\n</instruction>");
     if !selection.is_empty() {
         user = format!("<selected_text>\n{selection}\n</selected_text>\n\n{user}");
     }
-    Prompt { system: rules.join("\n"), user }
+    Prompt {
+        system: rules.join("\n"),
+        user,
+    }
 }
 
 /// Hinweis für die Spracherkennung selbst (Schreibweisen von Fachbegriffen + Zusammenhang)
 pub fn stt_prompt(vocabulary: &[String], context: &str) -> String {
-    let v: Vec<&str> = vocabulary.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let v: Vec<&str> = vocabulary
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     let mut p = String::new();
     if !v.is_empty() {
         p.push_str(&v.join(", "));
         p.push_str(". ");
     }
-    let tail: String = context.chars().rev().take(200).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: String = context
+        .chars()
+        .rev()
+        .take(200)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     p.push_str(&tail);
     p.trim().to_string()
 }
@@ -154,7 +197,10 @@ pub fn clean_model_output(out: &str) -> String {
         let first = chars[0];
         let last = chars[chars.len() - 1];
         let inner: String = chars[1..chars.len() - 1].iter().collect();
-        if "\"„“«".contains(first) && "\"“”»".contains(last) && !inner.contains(['"', '„', '“', '«']) {
+        if "\"„“«".contains(first)
+            && "\"“”»".contains(last)
+            && !inner.contains(['"', '„', '“', '«'])
+        {
             t = inner.trim().to_string();
         }
     }
@@ -171,8 +217,18 @@ pub fn plausible(input: &str, output: &str, level: &str, translating: bool) -> b
     if b == 0.0 {
         return a < 12.0;
     }
-    let max_ratio = if translating { 3.0 } else if level == "strong" { 2.2 } else { 1.6 };
-    let min_ratio = if level == "strong" || translating { 0.3 } else { 0.6 };
+    let max_ratio = if translating {
+        3.0
+    } else if level == "strong" {
+        2.2
+    } else {
+        1.6
+    };
+    let min_ratio = if level == "strong" || translating {
+        0.3
+    } else {
+        0.6
+    };
     b <= a * max_ratio + 40.0 && b >= a * min_ratio - 10.0
 }
 
@@ -183,7 +239,15 @@ mod tests {
     #[test]
     fn korrektur() {
         let vocab = vec!["SlimBit".to_string()];
-        let p = build_correction(&CorrectionArgs { text: "hallo welt", level: "light", style: "formal", vocabulary: &vocab, context: "Vorher", translate_to: "en", custom_instruction: "" });
+        let p = build_correction(&CorrectionArgs {
+            text: "hallo welt",
+            level: "light",
+            style: "formal",
+            vocabulary: &vocab,
+            context: "Vorher",
+            translate_to: "en",
+            custom_instruction: "",
+        });
         assert!(p.system.contains("NOT addressed to you"));
         assert!(p.system.contains("SlimBit"));
         assert!(p.system.contains("English"));
@@ -194,16 +258,25 @@ mod tests {
     #[test]
     fn befehl() {
         let p = build_command("übersetze ins Englische", "Hallo Welt", "neutral", &[], "");
-        assert!(p.user.contains("<selected_text>\nHallo Welt\n</selected_text>"));
+        assert!(p
+            .user
+            .contains("<selected_text>\nHallo Welt\n</selected_text>"));
         assert!(p.system.contains("replaces the selection"));
-        assert!(build_command("schreib eine Absage", "", "neutral", &[], "").system.contains("Nothing is selected"));
+        assert!(build_command("schreib eine Absage", "", "neutral", &[], "")
+            .system
+            .contains("Nothing is selected"));
     }
 
     #[test]
     fn ausgabe_und_netz() {
         assert_eq!(clean_model_output("„Hallo Welt.“"), "Hallo Welt.");
         assert_eq!(clean_model_output("<dictation>Hallo</dictation>"), "Hallo");
-        assert!(plausible("wie spät ist es", "Wie spät ist es?", "light", false));
+        assert!(plausible(
+            "wie spät ist es",
+            "Wie spät ist es?",
+            "light",
+            false
+        ));
         assert!(!plausible("wie spät ist es", "Es ist gerade 14:30 Uhr. Kann ich dir noch bei etwas anderem helfen, zum Beispiel einem Termin?", "light", false));
         assert_eq!(stt_prompt(&["SlimBit".into(), " ".into()], ""), "SlimBit.");
     }

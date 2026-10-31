@@ -6,8 +6,13 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 pub fn start() {
-    let port: u16 = std::env::var("SLIMVOICE_CONTROL_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(0);
-    let Ok(l) = TcpListener::bind(("127.0.0.1", port)) else { return };
+    let port: u16 = std::env::var("SLIMVOICE_CONTROL_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(0);
+    let Ok(l) = TcpListener::bind(("127.0.0.1", port)) else {
+        return;
+    };
     if let Ok(addr) = l.local_addr() {
         if let Ok(f) = std::env::var("SLIMVOICE_CONTROL_FILE") {
             let _ = std::fs::write(f, addr.port().to_string());
@@ -26,7 +31,13 @@ pub fn start() {
                 buf.extend_from_slice(&tmp[..n]);
                 if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
                     let head = String::from_utf8_lossy(&buf[..p]).to_lowercase();
-                    let len = head.lines().find_map(|l| l.strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                    let len = head
+                        .lines()
+                        .find_map(|l| {
+                            l.strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
                     break (p + 4, len);
                 }
             };
@@ -49,18 +60,29 @@ pub fn start() {
 
 fn handle(path: &str, body: Value) -> Value {
     let s = crate::st();
-    let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    };
     match path {
         "/state" => {
             let r = s.rec.lock().unwrap();
             json!({ "recording": r.recording, "id": r.id, "app": r.app_name })
         }
         "/toggle" => {
-            crate::toggle_dictation(crate::StartOpts { how: "hotkey".into(), command: false });
+            crate::toggle_dictation(crate::StartOpts {
+                how: "hotkey".into(),
+                command: false,
+            });
             json!(true)
         }
         "/command" => {
-            crate::toggle_dictation(crate::StartOpts { how: "hotkey".into(), command: true });
+            crate::toggle_dictation(crate::StartOpts {
+                how: "hotkey".into(),
+                command: true,
+            });
             json!(true)
         }
         "/cancel" => {
@@ -69,7 +91,11 @@ fn handle(path: &str, body: Value) -> Value {
         }
         "/hold/press" | "/hold/release" => {
             let rec = s.rec.lock().unwrap().recording;
-            let a = if path.ends_with("press") { s_hold_press(now(), rec) } else { s_hold_release(now(), rec) };
+            let a = if path.ends_with("press") {
+                s_hold_press(now(), rec)
+            } else {
+                s_hold_release(now(), rec)
+            };
             json!(format!("{a:?}"))
         }
         "/nav" => {
@@ -79,7 +105,8 @@ fn handle(path: &str, body: Value) -> Value {
         "/dispatch" => {
             let ch = body["ch"].as_str().unwrap_or("").to_string();
             let args = body["args"].as_array().cloned().unwrap_or_default();
-            tauri::async_runtime::block_on(crate::dispatch(&ch, &args)).unwrap_or_else(|e| json!({ "error": e }))
+            tauri::async_runtime::block_on(crate::dispatch(&ch, &args))
+                .unwrap_or_else(|e| json!({ "error": e }))
         }
         _ => json!({ "error": "unknown" }),
     }

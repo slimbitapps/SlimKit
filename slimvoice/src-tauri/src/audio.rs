@@ -10,7 +10,10 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub enum AudioMsg {
-    Level { level: f32, speaking: bool },
+    Level {
+        level: f32,
+        speaking: bool,
+    },
     Segment(Vec<i16>),
     Error(String),
     /// Aufnahme ist sauber beendet (alle Abschnitte sind raus)
@@ -44,7 +47,10 @@ impl Recorder {
             }
             let _ = tx.send(AudioMsg::Ended);
         });
-        Recorder { stop, handle: Some(handle) }
+        Recorder {
+            stop,
+            handle: Some(handle),
+        }
     }
 
     /// Beenden; der laufende Abschnitt wird noch verschickt
@@ -72,7 +78,13 @@ struct Pipeline {
 
 impl Pipeline {
     fn new(rate: u32, o: &RecOpts) -> Self {
-        Self { resampler: Resampler::new(rate), seg: Segmenter::new(o.pause_ms, o.sensitivity), vad: o.vad, level_buf: Vec::new(), events: Vec::new() }
+        Self {
+            resampler: Resampler::new(rate),
+            seg: Segmenter::new(o.pause_ms, o.sensitivity),
+            vad: o.vad,
+            level_buf: Vec::new(),
+            events: Vec::new(),
+        }
     }
     fn feed(&mut self, mono: &[f32], tx: &Sender<AudioMsg>) {
         let s = self.resampler.process(mono);
@@ -83,7 +95,10 @@ impl Pipeline {
             while self.level_buf.len() >= FRAME * 2 {
                 let f: Vec<f32> = self.level_buf.drain(..FRAME * 2).collect();
                 let rms = (f.iter().map(|v| v * v).sum::<f32>() / f.len() as f32).sqrt();
-                let _ = tx.send(AudioMsg::Level { level: (rms * 6.0).min(1.0), speaking: false });
+                let _ = tx.send(AudioMsg::Level {
+                    level: (rms * 6.0).min(1.0),
+                    speaking: false,
+                });
             }
         }
         self.drain(tx);
@@ -104,7 +119,12 @@ impl Pipeline {
     }
 }
 
-fn run_fake(path: &str, o: &RecOpts, stop: &AtomicBool, tx: &Sender<AudioMsg>) -> Result<(), String> {
+fn run_fake(
+    path: &str,
+    o: &RecOpts,
+    stop: &AtomicBool,
+    tx: &Sender<AudioMsg>,
+) -> Result<(), String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let (samples, rate) = crate::wav::decode_wav(&bytes).ok_or("bad wav")?;
     let mut p = Pipeline::new(rate, o);
@@ -126,7 +146,10 @@ fn run_mic(o: &RecOpts, stop: &AtomicBool, tx: &Sender<AudioMsg>) -> Result<(), 
     let device = if o.device.is_empty() {
         host.default_input_device()
     } else {
-        host.input_devices().ok().and_then(|mut d| d.find(|d| d.name().map(|n| n == o.device).unwrap_or(false))).or_else(|| host.default_input_device())
+        host.input_devices()
+            .ok()
+            .and_then(|mut d| d.find(|d| d.name().map(|n| n == o.device).unwrap_or(false)))
+            .or_else(|| host.default_input_device())
     }
     .ok_or("no microphone")?;
     let config = device.default_input_config().map_err(|e| e.to_string())?;
@@ -138,13 +161,43 @@ fn run_mic(o: &RecOpts, stop: &AtomicBool, tx: &Sender<AudioMsg>) -> Result<(), 
         let _ = err_tx.send(AudioMsg::Error(e.to_string()));
     };
     fn mono<T: Copy>(data: &[T], ch: usize, conv: impl Fn(T) -> f32) -> Vec<f32> {
-        data.chunks(ch.max(1)).map(|f| f.iter().map(|&s| conv(s)).sum::<f32>() / f.len() as f32).collect()
+        data.chunks(ch.max(1))
+            .map(|f| f.iter().map(|&s| conv(s)).sum::<f32>() / f.len() as f32)
+            .collect()
     }
     let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => device.build_input_stream(&config.into(), move |d: &[f32], _: &_| { let _ = dtx.send(mono(d, channels, |s| s)); }, on_err, None),
-        cpal::SampleFormat::I16 => device.build_input_stream(&config.into(), move |d: &[i16], _: &_| { let _ = dtx.send(mono(d, channels, |s| s as f32 / 32768.0)); }, on_err, None),
-        cpal::SampleFormat::U16 => device.build_input_stream(&config.into(), move |d: &[u16], _: &_| { let _ = dtx.send(mono(d, channels, |s| (s as f32 - 32768.0) / 32768.0)); }, on_err, None),
-        cpal::SampleFormat::I32 => device.build_input_stream(&config.into(), move |d: &[i32], _: &_| { let _ = dtx.send(mono(d, channels, |s| s as f32 / 2147483648.0)); }, on_err, None),
+        cpal::SampleFormat::F32 => device.build_input_stream(
+            &config.into(),
+            move |d: &[f32], _: &_| {
+                let _ = dtx.send(mono(d, channels, |s| s));
+            },
+            on_err,
+            None,
+        ),
+        cpal::SampleFormat::I16 => device.build_input_stream(
+            &config.into(),
+            move |d: &[i16], _: &_| {
+                let _ = dtx.send(mono(d, channels, |s| s as f32 / 32768.0));
+            },
+            on_err,
+            None,
+        ),
+        cpal::SampleFormat::U16 => device.build_input_stream(
+            &config.into(),
+            move |d: &[u16], _: &_| {
+                let _ = dtx.send(mono(d, channels, |s| (s as f32 - 32768.0) / 32768.0));
+            },
+            on_err,
+            None,
+        ),
+        cpal::SampleFormat::I32 => device.build_input_stream(
+            &config.into(),
+            move |d: &[i32], _: &_| {
+                let _ = dtx.send(mono(d, channels, |s| s as f32 / 2147483648.0));
+            },
+            on_err,
+            None,
+        ),
         f => return Err(format!("unsupported sample format {f:?}")),
     }
     .map_err(|e| e.to_string())?;
@@ -165,5 +218,8 @@ fn run_mic(o: &RecOpts, stop: &AtomicBool, tx: &Sender<AudioMsg>) -> Result<(), 
 
 pub fn list_inputs() -> Vec<String> {
     use cpal::traits::{DeviceTrait, HostTrait};
-    cpal::default_host().input_devices().map(|d| d.filter_map(|d| d.name().ok()).collect()).unwrap_or_default()
+    cpal::default_host()
+        .input_devices()
+        .map(|d| d.filter_map(|d| d.name().ok()).collect())
+        .unwrap_or_default()
 }

@@ -4,10 +4,13 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static CMD_PARAGRAPH: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\s*[,.]?\s*\b(neuer absatz|neuen absatz|new paragraph)\b[.,!]?\s*").unwrap());
-static CMD_LINE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\s*[,.]?\s*\b(neue zeile|nächste zeile|new line|next line)\b[.,!]?\s*").unwrap());
+static CMD_PARAGRAPH: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\s*[,.]?\s*\b(neuer absatz|neuen absatz|new paragraph)\b[.,!]?\s*").unwrap()
+});
+static CMD_LINE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\s*[,.]?\s*\b(neue zeile|nächste zeile|new line|next line)\b[.,!]?\s*")
+        .unwrap()
+});
 static AFTER_NEWLINE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n[ \t]*(\p{Ll})").unwrap());
 
 /// „neuer Absatz“, „neue Zeile“ → Zeilenumbrüche; danach groß weiter
@@ -15,7 +18,9 @@ pub fn apply_voice_commands(text: &str) -> String {
     let out = CMD_PARAGRAPH.replace_all(text, "\n\n");
     let out = CMD_LINE.replace_all(&out, "\n");
     AFTER_NEWLINE
-        .replace_all(&out, |c: &regex::Captures| format!("\n{}", c[1].to_uppercase()))
+        .replace_all(&out, |c: &regex::Captures| {
+            format!("\n{}", c[1].to_uppercase())
+        })
         .into_owned()
 }
 
@@ -35,7 +40,9 @@ pub fn remove_fillers(text: &str, lang: &str) -> String {
     };
     let mut kept: Vec<String> = Vec::new();
     for token in text.split(' ') {
-        let core: String = token.trim_matches(|c: char| ",.!?…".contains(c)).to_lowercase();
+        let core: String = token
+            .trim_matches(|c: char| ",.!?…".contains(c))
+            .to_lowercase();
         if !core.is_empty() && is_filler(&core) {
             // Satzende-Zeichen des Füllworts an das vorige Wort hängen
             if let Some(end) = token.chars().last().filter(|c| ".!?…".contains(*c)) {
@@ -147,7 +154,9 @@ pub struct CleanupOpts<'a> {
 pub fn local_cleanup(text: &str, o: &CleanupOpts) -> String {
     let mut out = tidy(text);
     // Whisper markiert Nicht-Sprache manchmal in Klammern
-    static TAGS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\[(blank_audio|musik|music|stille|silence|inaudible)\]|\((musik|music|stille|silence)\)").unwrap());
+    static TAGS: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)\[(blank_audio|musik|music|stille|silence|inaudible)\]|\((musik|music|stille|silence)\)").unwrap()
+    });
     out = TAGS.replace_all(&out, "").into_owned();
     out = tidy(&out);
     if is_hallucination(&out) {
@@ -197,23 +206,44 @@ mod tests {
 
     #[test]
     fn sprachbefehle() {
-        assert_eq!(apply_voice_commands("Hallo zusammen neuer Absatz wie geht es euch"), "Hallo zusammen\n\nWie geht es euch");
-        assert_eq!(apply_voice_commands("first line. New line. second line"), "first line\nSecond line");
+        assert_eq!(
+            apply_voice_commands("Hallo zusammen neuer Absatz wie geht es euch"),
+            "Hallo zusammen\n\nWie geht es euch"
+        );
+        assert_eq!(
+            apply_voice_commands("first line. New line. second line"),
+            "first line\nSecond line"
+        );
     }
 
     #[test]
     fn fuellwoerter() {
-        assert_eq!(remove_fillers("Also äh ich wollte ähm sagen, dass", "de"), "Also ich wollte sagen, dass");
+        assert_eq!(
+            remove_fillers("Also äh ich wollte ähm sagen, dass", "de"),
+            "Also ich wollte sagen, dass"
+        );
         assert_eq!(remove_fillers("Äh, hallo.", "auto"), "hallo.");
-        assert_eq!(remove_fillers("So um, I think uh yes", "en"), "So I think yes");
+        assert_eq!(
+            remove_fillers("So um, I think uh yes", "en"),
+            "So I think yes"
+        );
         assert_eq!(remove_fillers("Er kommt um acht", "de"), "Er kommt um acht");
-        assert_eq!(remove_fillers("Er kommt um acht äh.", "auto"), "Er kommt um acht.");
+        assert_eq!(
+            remove_fillers("Er kommt um acht äh.", "auto"),
+            "Er kommt um acht."
+        );
     }
 
     #[test]
     fn ersetzungen() {
-        let r = vec![Replacement { from: "mfg".into(), to: "Mit freundlichen Grüßen".into() }];
-        assert_eq!(apply_replacements("Danke und MfG", &r), "Danke und Mit freundlichen Grüßen");
+        let r = vec![Replacement {
+            from: "mfg".into(),
+            to: "Mit freundlichen Grüßen".into(),
+        }];
+        assert_eq!(
+            apply_replacements("Danke und MfG", &r),
+            "Danke und Mit freundlichen Grüßen"
+        );
         assert_eq!(apply_replacements("amfgx bleibt", &r), "amfgx bleibt");
     }
 
@@ -224,7 +254,10 @@ mod tests {
         assert!(is_hallucination("you"));
         assert!(is_hallucination("[BLANK_AUDIO]"));
         assert!(!is_hallucination("Vielen Dank für deine Nachricht."));
-        assert_eq!(local_cleanup(" [BLANK_AUDIO] ", &CleanupOpts::default()), "");
+        assert_eq!(
+            local_cleanup(" [BLANK_AUDIO] ", &CleanupOpts::default()),
+            ""
+        );
     }
 
     #[test]

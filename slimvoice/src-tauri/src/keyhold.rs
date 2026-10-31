@@ -20,7 +20,13 @@ pub struct KeyHold {
 
 impl KeyHold {
     pub fn new(hold_ms: u64) -> Self {
-        Self { hold_ms, down: false, started_at: 0, ours: false, hands_free: false }
+        Self {
+            hold_ms,
+            down: false,
+            started_at: 0,
+            ours: false,
+            hands_free: false,
+        }
     }
 
     pub fn pressed(&mut self, now: u64, recording: bool) -> Action {

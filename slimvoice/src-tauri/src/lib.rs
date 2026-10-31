@@ -32,7 +32,9 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 pub const WEBSITE: &str = "https://slimbitapps.github.io/";
 
 pub fn is_test() -> bool {
-    std::env::var("SLIMVOICE_TEST").map(|v| !v.is_empty()).unwrap_or(false)
+    std::env::var("SLIMVOICE_TEST")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
 }
 
 // ------------------------------------------------------------------ Zustand
@@ -76,13 +78,20 @@ pub fn st() -> &'static Arc<State> {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn log(msg: impl AsRef<str>) {
     if let Some(s) = STATE.get() {
         use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(s.dir.join("app.log")) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(s.dir.join("app.log"))
+        {
             let _ = writeln!(f, "[{}] {}", chrono::Utc::now().to_rfc3339(), msg.as_ref());
         }
     }
@@ -93,7 +102,10 @@ fn ui_lang() -> &'static str {
     if l == "de" || l == "en" {
         return if l == "de" { "de" } else { "en" };
     }
-    if sys_locale::get_locale().unwrap_or_default().starts_with("de") {
+    if sys_locale::get_locale()
+        .unwrap_or_default()
+        .starts_with("de")
+    {
         "de"
     } else {
         "en"
@@ -130,7 +142,10 @@ struct Resolved {
 }
 
 fn has_key(p: &str) -> bool {
-    providers::llm_info(p).map(|i| i.key_optional).unwrap_or(false) || !st().secrets.lock().unwrap().get(p).is_empty()
+    providers::llm_info(p)
+        .map(|i| i.key_optional)
+        .unwrap_or(false)
+        || !st().secrets.lock().unwrap().get(p).is_empty()
 }
 
 /// „auto“: derselbe Dienst wie die Spracherkennung, sonst der erste mit Schlüssel
@@ -143,7 +158,11 @@ fn resolve_llm(cfg: &Value) -> String {
     if providers::llm_info(&stt).is_some() && stt != "custom" && has_key(&stt) {
         return stt;
     }
-    ["groq", "openai", "gemini", "anthropic"].iter().find(|k| has_key(k)).map(|s| s.to_string()).unwrap_or_default()
+    ["groq", "openai", "gemini", "anthropic"]
+        .iter()
+        .find(|k| has_key(k))
+        .map(|s| s.to_string())
+        .unwrap_or_default()
 }
 
 fn resolve(cfg: &Value) -> Resolved {
@@ -161,8 +180,20 @@ fn resolve(cfg: &Value) -> Resolved {
         })
         .unwrap_or_default();
     if stt == "local" || providers::stt_info(&stt).is_none() {
-        let key = local::model(&cfg.s("/services/local/model")).key.to_string();
-        return Resolved { stt_provider: "local".into(), models: session::Models { stt_main: key.clone(), stt_preview: key, max_seconds: 1800, llm_model, pipeline: true }, llm_provider };
+        let key = local::model(&cfg.s("/services/local/model"))
+            .key
+            .to_string();
+        return Resolved {
+            stt_provider: "local".into(),
+            models: session::Models {
+                stt_main: key.clone(),
+                stt_preview: key,
+                max_seconds: 1800,
+                llm_model,
+                pipeline: true,
+            },
+            llm_provider,
+        };
     }
     let info = providers::stt_info(&stt).unwrap();
     let pick = |ptr: &str, def: &str| {
@@ -175,7 +206,13 @@ fn resolve(cfg: &Value) -> Resolved {
     };
     Resolved {
         stt_provider: stt,
-        models: session::Models { stt_main: pick("/services/stt/model", info.main[tempo]), stt_preview: pick("/services/stt/fastModel", info.preview), max_seconds: info.max_seconds, llm_model, pipeline: false },
+        models: session::Models {
+            stt_main: pick("/services/stt/model", info.main[tempo]),
+            stt_preview: pick("/services/stt/fastModel", info.preview),
+            max_seconds: info.max_seconds,
+            llm_model,
+            pipeline: false,
+        },
         llm_provider,
     }
 }
@@ -216,7 +253,9 @@ fn create_overlay(app: &AppHandle) {
 
 fn show_overlay() {
     let app = &st().handle;
-    let Some(w) = app.get_webview_window("overlay") else { return };
+    let Some(w) = app.get_webview_window("overlay") else {
+        return;
+    };
     let top = st().settings.lock().unwrap().str("/dictation/overlay") == "top";
     if let Ok(pos) = app.cursor_position() {
         if let Ok(Some(m)) = app.monitor_from_point(pos.x, pos.y) {
@@ -224,7 +263,11 @@ fn show_overlay() {
             let scale = m.scale_factor();
             let (w_px, h_px) = ((460.0 * scale) as i32, (168.0 * scale) as i32);
             let x = wa.position.x + (wa.size.width as i32 - w_px) / 2;
-            let y = if top { wa.position.y + (12.0 * scale) as i32 } else { wa.position.y + wa.size.height as i32 - h_px - (12.0 * scale) as i32 };
+            let y = if top {
+                wa.position.y + (12.0 * scale) as i32
+            } else {
+                wa.position.y + wa.size.height as i32 - h_px - (12.0 * scale) as i32
+            };
             let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
         }
     }
@@ -261,7 +304,12 @@ pub fn show_settings(page: Option<&str>) {
         Some(p) => format!("index.html?page={p}"),
         None => "index.html".into(),
     };
-    let w = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(url.into())).title("SlimVoice").inner_size(980.0, 720.0).min_inner_size(780.0, 560.0).center().build();
+    let w = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(url.into()))
+        .title("SlimVoice")
+        .inner_size(980.0, 720.0)
+        .min_inner_size(780.0, 560.0)
+        .center()
+        .build();
     match w {
         Ok(w) => {
             let _ = w.set_focus();
@@ -278,9 +326,17 @@ fn settings_changed() {
 // ------------------------------------------------------------------ Infobereich / Menüleiste
 fn tray_icon(recording: bool) -> tauri::image::Image<'static> {
     #[cfg(target_os = "macos")]
-    let bytes: &'static [u8] = if recording { include_bytes!("../icons/trayRecTemplate@2x.png") } else { include_bytes!("../icons/trayTemplate@2x.png") };
+    let bytes: &'static [u8] = if recording {
+        include_bytes!("../icons/trayRecTemplate@2x.png")
+    } else {
+        include_bytes!("../icons/trayTemplate@2x.png")
+    };
     #[cfg(not(target_os = "macos"))]
-    let bytes: &'static [u8] = if recording { include_bytes!("../icons/tray-rec.png") } else { include_bytes!("../icons/tray.png") };
+    let bytes: &'static [u8] = if recording {
+        include_bytes!("../icons/tray-rec.png")
+    } else {
+        include_bytes!("../icons/tray.png")
+    };
     tauri::image::Image::from_bytes(bytes).expect("tray icon")
 }
 
@@ -288,23 +344,117 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let s = st();
     let cfg = s.settings.lock().unwrap().data.clone();
     let recording = s.rec.lock().unwrap().recording;
-    let start = MenuItem::with_id(app, "toggle", if recording { tr("Diktat beenden", "Stop dictation") } else { tr("Diktat starten", "Start dictation") }, true, None::<&str>)?;
-    let cancel = MenuItem::with_id(app, "cancel", tr("Diktat abbrechen", "Cancel dictation"), recording, None::<&str>)?;
-    let radio = |prefix: &str, cur: &str, items: &[(&str, &str, &str)]| -> tauri::Result<Vec<CheckMenuItem<tauri::Wry>>> {
-        items.iter().map(|(v, de, en)| CheckMenuItem::with_id(app, format!("{prefix}:{v}"), if ui_lang() == "de" { *de } else { *en }, true, cur == *v, None::<&str>)).collect()
+    let start = MenuItem::with_id(
+        app,
+        "toggle",
+        if recording {
+            tr("Diktat beenden", "Stop dictation")
+        } else {
+            tr("Diktat starten", "Start dictation")
+        },
+        true,
+        None::<&str>,
+    )?;
+    let cancel = MenuItem::with_id(
+        app,
+        "cancel",
+        tr("Diktat abbrechen", "Cancel dictation"),
+        recording,
+        None::<&str>,
+    )?;
+    let radio = |prefix: &str,
+                 cur: &str,
+                 items: &[(&str, &str, &str)]|
+     -> tauri::Result<Vec<CheckMenuItem<tauri::Wry>>> {
+        items
+            .iter()
+            .map(|(v, de, en)| {
+                CheckMenuItem::with_id(
+                    app,
+                    format!("{prefix}:{v}"),
+                    if ui_lang() == "de" { *de } else { *en },
+                    true,
+                    cur == *v,
+                    None::<&str>,
+                )
+            })
+            .collect()
     };
-    let modes = radio("mode", &cfg.s("/dictation/mode"), &[("live", "Sofort einfügen", "Insert right away"), ("preview", "Live-Vorschau", "Live preview"), ("batch", "Erst aufnehmen", "Record first")])?;
-    let levels = radio("ai", &cfg.s("/ai/level"), &[("off", "Aus", "Off"), ("punct", "Nur Satzzeichen", "Punctuation only"), ("light", "Leicht", "Light"), ("strong", "Stark", "Strong")])?;
-    let mode_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = modes.iter().map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>).collect();
-    let level_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = levels.iter().map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>).collect();
+    let modes = radio(
+        "mode",
+        &cfg.s("/dictation/mode"),
+        &[
+            ("live", "Sofort einfügen", "Insert right away"),
+            ("preview", "Live-Vorschau", "Live preview"),
+            ("batch", "Erst aufnehmen", "Record first"),
+        ],
+    )?;
+    let levels = radio(
+        "ai",
+        &cfg.s("/ai/level"),
+        &[
+            ("off", "Aus", "Off"),
+            ("punct", "Nur Satzzeichen", "Punctuation only"),
+            ("light", "Leicht", "Light"),
+            ("strong", "Stark", "Strong"),
+        ],
+    )?;
+    let mode_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = modes
+        .iter()
+        .map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect();
+    let level_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = levels
+        .iter()
+        .map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect();
     let mode_menu = Submenu::with_items(app, tr("Modus", "Mode"), true, &mode_refs)?;
     let ai_menu = Submenu::with_items(app, tr("KI-Korrektur", "AI correction"), true, &level_refs)?;
-    let has_last = !s.last_text.lock().unwrap().is_empty() || !s.history.lock().unwrap().items.is_empty();
-    let copy = MenuItem::with_id(app, "copy_last", tr("Letztes Diktat kopieren", "Copy last dictation"), has_last, None::<&str>)?;
-    let history = MenuItem::with_id(app, "history", tr("Verlauf …", "History …"), true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", tr("Einstellungen …", "Settings …"), true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", tr("SlimVoice beenden", "Quit SlimVoice"), true, None::<&str>)?;
-    Menu::with_items(app, &[&start, &cancel, &PredefinedMenuItem::separator(app)?, &mode_menu, &ai_menu, &PredefinedMenuItem::separator(app)?, &copy, &history, &settings, &PredefinedMenuItem::separator(app)?, &quit])
+    let has_last =
+        !s.last_text.lock().unwrap().is_empty() || !s.history.lock().unwrap().items.is_empty();
+    let copy = MenuItem::with_id(
+        app,
+        "copy_last",
+        tr("Letztes Diktat kopieren", "Copy last dictation"),
+        has_last,
+        None::<&str>,
+    )?;
+    let history = MenuItem::with_id(
+        app,
+        "history",
+        tr("Verlauf …", "History …"),
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(
+        app,
+        "settings",
+        tr("Einstellungen …", "Settings …"),
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        tr("SlimVoice beenden", "Quit SlimVoice"),
+        true,
+        None::<&str>,
+    )?;
+    Menu::with_items(
+        app,
+        &[
+            &start,
+            &cancel,
+            &PredefinedMenuItem::separator(app)?,
+            &mode_menu,
+            &ai_menu,
+            &PredefinedMenuItem::separator(app)?,
+            &copy,
+            &history,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )
 }
 
 fn update_tray() {
@@ -333,7 +483,13 @@ fn on_menu(id: &str) {
             let t = {
                 let l = st().last_text.lock().unwrap().clone();
                 if l.is_empty() {
-                    st().history.lock().unwrap().items.first().and_then(|i| i["text"].as_str().map(|s| s.to_string())).unwrap_or_default()
+                    st().history
+                        .lock()
+                        .unwrap()
+                        .items
+                        .first()
+                        .and_then(|i| i["text"].as_str().map(|s| s.to_string()))
+                        .unwrap_or_default()
                 } else {
                     l
                 }
@@ -368,16 +524,23 @@ fn register_shortcuts() -> Value {
     map.clear();
     let cfg = st().settings.lock().unwrap().data.clone();
     let mut ok = serde_json::Map::new();
-    for (kind, ptr) in [("toggle", "/hotkey/toggle"), ("command", "/hotkey/command"), ("cancel", "/hotkey/cancel")] {
+    for (kind, ptr) in [
+        ("toggle", "/hotkey/toggle"),
+        ("command", "/hotkey/command"),
+        ("cancel", "/hotkey/cancel"),
+    ] {
         let accel = cfg.s(ptr);
         if accel.is_empty() {
             ok.insert(kind.into(), json!(true));
             continue;
         }
-        let res = accel.parse::<Shortcut>().map_err(|e| e.to_string()).and_then(|sc| {
-            map.insert(sc.id(), kind);
-            gs.register(sc).map_err(|e| e.to_string())
-        });
+        let res = accel
+            .parse::<Shortcut>()
+            .map_err(|e| e.to_string())
+            .and_then(|sc| {
+                map.insert(sc.id(), kind);
+                gs.register(sc).map_err(|e| e.to_string())
+            });
         if let Err(e) = &res {
             log(format!("hotkey {kind} {accel}: {e}"));
         }
@@ -391,7 +554,10 @@ fn register_shortcuts() -> Value {
 pub fn hold_pressed(now: u64, recording: bool) -> keyhold::Action {
     let a = st().hold.lock().unwrap().pressed(now, recording);
     match a {
-        keyhold::Action::Start => start_dictation(StartOpts { how: "hold".into(), command: false }),
+        keyhold::Action::Start => start_dictation(StartOpts {
+            how: "hold".into(),
+            command: false,
+        }),
         keyhold::Action::Stop => stop_dictation(),
         keyhold::Action::None => {}
     }
@@ -419,7 +585,10 @@ fn on_shortcut(sc: &Shortcut, state: ShortcutState) {
         (Some("toggle"), ShortcutState::Released) => {
             hold_released(now_ms(), recording);
         }
-        (Some("command"), ShortcutState::Pressed) => toggle_dictation(StartOpts { how: "hotkey".into(), command: true }),
+        (Some("command"), ShortcutState::Pressed) => toggle_dictation(StartOpts {
+            how: "hotkey".into(),
+            command: true,
+        }),
         (Some("cancel"), ShortcutState::Pressed) => {
             if recording {
                 cancel_dictation()
@@ -474,7 +643,11 @@ pub fn start_dictation(o: StartOpts) {
     let cfg = s.settings.lock().unwrap().data.clone();
     let res = resolve(&cfg);
     let lang = ui_lang();
-    let hotkey = if o.command { cfg.s("/hotkey/command") } else { cfg.s("/hotkey/toggle") };
+    let hotkey = if o.command {
+        cfg.s("/hotkey/command")
+    } else {
+        cfg.s("/hotkey/toggle")
+    };
     show_overlay();
     let _ = s.handle.emit_to(
         "overlay",
@@ -491,8 +664,15 @@ pub fn start_dictation(o: StartOpts) {
         if !local_ready(&cfg) {
             return error_and_reset(id, json!({ "code": "local_missing" }));
         }
-    } else if !providers::stt_info(&res.stt_provider).map(|i| i.key_optional).unwrap_or(false) && s.secrets.lock().unwrap().get(&res.stt_provider).is_empty() {
-        return error_and_reset(id, json!({ "code": "no_key", "provider": res.stt_provider }));
+    } else if !providers::stt_info(&res.stt_provider)
+        .map(|i| i.key_optional)
+        .unwrap_or(false)
+        && s.secrets.lock().unwrap().get(&res.stt_provider).is_empty()
+    {
+        return error_and_reset(
+            id,
+            json!({ "code": "no_key", "provider": res.stt_provider }),
+        );
     }
     let llm_ok = !res.models.llm_model.is_empty() && has_key(&res.llm_provider);
     if o.command && !llm_ok {
@@ -534,7 +714,15 @@ pub fn start_dictation(o: StartOpts) {
             _ => 750,
         }
     };
-    let recorder = audio::Recorder::start(audio::RecOpts { device: cfg.s("/dictation/micId"), pause_ms: pause, sensitivity: cfg.n("/dictation/sensitivity") as u32, vad: true }, tx);
+    let recorder = audio::Recorder::start(
+        audio::RecOpts {
+            device: cfg.s("/dictation/micId"),
+            pause_ms: pause,
+            sensitivity: cfg.n("/dictation/sensitivity") as u32,
+            vad: true,
+        },
+        tx,
+    );
     s.rec.lock().unwrap().recorder = Some(recorder);
 
     let stt_provider = res.stt_provider.clone();
@@ -548,15 +736,31 @@ pub fn start_dictation(o: StartOpts) {
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
             let ins = s.inserter.clone();
-            tokio::time::timeout(Duration::from_millis(2000), tauri::async_runtime::spawn_blocking(move || ins.copy_selection())).await.ok().and_then(|r| r.ok()).unwrap_or_default()
+            tokio::time::timeout(
+                Duration::from_millis(2000),
+                tauri::async_runtime::spawn_blocking(move || ins.copy_selection()),
+            )
+            .await
+            .ok()
+            .and_then(|r| r.ok())
+            .unwrap_or_default()
         } else {
             String::new()
         };
         if command {
-            overlay_event(json!({ "id": id, "type": "command", "command": if selection.is_empty() { "write" } else { "selection" } }));
+            overlay_event(
+                json!({ "id": id, "type": "command", "command": if selection.is_empty() { "write" } else { "selection" } }),
+            );
         }
         let ins = s.inserter.clone();
-        let app_name = tokio::time::timeout(Duration::from_millis(500), tauri::async_runtime::spawn_blocking(move || ins.foreground_app())).await.ok().and_then(|r| r.ok()).unwrap_or_default();
+        let app_name = tokio::time::timeout(
+            Duration::from_millis(500),
+            tauri::async_runtime::spawn_blocking(move || ins.foreground_app()),
+        )
+        .await
+        .ok()
+        .and_then(|r| r.ok())
+        .unwrap_or_default();
         remember_app(&app_name);
         let (ai, profile) = session::ai_for_app(&cfg, &app_name);
         let mut ai = ai;
@@ -566,8 +770,25 @@ pub fn start_dictation(o: StartOpts) {
             ai.replacements.clear();
         }
         overlay_event(json!({ "id": id, "type": "info", "app": app_name, "profile": profile }));
-        let session_cfg = session::Cfg { mode: if command { "batch".into() } else { cfg.s("/dictation/mode") }, language: cfg.s("/dictation/language"), trailing_space: !command && cfg.b("/dictation/trailingSpace"), ai };
-        let deps = make_deps(&cfg, id, &stt_provider, &llm_provider, &models, &method, command);
+        let session_cfg = session::Cfg {
+            mode: if command {
+                "batch".into()
+            } else {
+                cfg.s("/dictation/mode")
+            },
+            language: cfg.s("/dictation/language"),
+            trailing_space: !command && cfg.b("/dictation/trailingSpace"),
+            ai,
+        };
+        let deps = make_deps(
+            &cfg,
+            id,
+            &stt_provider,
+            &llm_provider,
+            &models,
+            &method,
+            command,
+        );
         let sess = session::Session::new(id, session_cfg, models.clone(), deps);
         {
             let mut r = s.rec.lock().unwrap();
@@ -575,7 +796,11 @@ pub fn start_dictation(o: StartOpts) {
                 return;
             }
             r.session = Some(sess.clone());
-            r.command = if command { Some(CommandCtx { selection }) } else { None };
+            r.command = if command {
+                Some(CommandCtx { selection })
+            } else {
+                None
+            };
             r.app_name = app_name;
         }
         // Audio-Ereignisse weiterreichen (Pegel → Anzeige, Abschnitte → Diktat)
@@ -585,7 +810,11 @@ pub fn start_dictation(o: StartOpts) {
             while let Ok(msg) = rx.recv() {
                 match msg {
                     audio::AudioMsg::Level { level, speaking } => {
-                        let _ = st().handle.emit_to("overlay", "rec:level", json!({ "level": level, "speaking": speaking }));
+                        let _ = st().handle.emit_to(
+                            "overlay",
+                            "rec:level",
+                            json!({ "level": level, "speaking": speaking }),
+                        );
                     }
                     audio::AudioMsg::Segment(pcm) => {
                         sess.add_segment(idx, pcm);
@@ -594,7 +823,9 @@ pub fn start_dictation(o: StartOpts) {
                     audio::AudioMsg::Error(e) => {
                         log(format!("audio: {e}"));
                         errored = true;
-                        overlay_event(json!({ "id": id, "type": "error", "code": "mic", "message": e }));
+                        overlay_event(
+                            json!({ "id": id, "type": "error", "code": "mic", "message": e }),
+                        );
                     }
                     audio::AudioMsg::Ended => break,
                 }
@@ -618,7 +849,15 @@ pub fn start_dictation(o: StartOpts) {
     });
 }
 
-fn make_deps(cfg: &Value, id: u64, stt_provider: &str, llm_provider: &str, models: &session::Models, method: &str, command: bool) -> session::Deps {
+fn make_deps(
+    cfg: &Value,
+    id: u64,
+    stt_provider: &str,
+    llm_provider: &str,
+    models: &session::Models,
+    method: &str,
+    command: bool,
+) -> session::Deps {
     let s = st();
     let stt_provider = stt_provider.to_string();
     let llm_provider = llm_provider.to_string();
@@ -635,23 +874,63 @@ fn make_deps(cfg: &Value, id: u64, stt_provider: &str, llm_provider: &str, model
     let method = method.to_string();
     session::Deps {
         transcribe: Arc::new(move |pcm, model, prompt| {
-            let (p, lang, base, key) = (stt_provider.clone(), language.clone(), base.clone(), stt_key.clone());
+            let (p, lang, base, key) = (
+                stt_provider.clone(),
+                language.clone(),
+                base.clone(),
+                stt_key.clone(),
+            );
             Box::pin(async move {
                 if p == "local" {
                     let eng = st().engine.clone();
                     let lang2 = lang.clone();
-                    let r = tauri::async_runtime::spawn_blocking(move || eng.transcribe(&model, gpu, &pcm, if lang2.is_empty() { "auto" } else { &lang2 }, &prompt, best))
-                        .await
-                        .map_err(|e| providers::SvError::new("local", e.to_string()))??;
+                    let r = tauri::async_runtime::spawn_blocking(move || {
+                        eng.transcribe(
+                            &model,
+                            gpu,
+                            &pcm,
+                            if lang2.is_empty() { "auto" } else { &lang2 },
+                            &prompt,
+                            best,
+                        )
+                    })
+                    .await
+                    .map_err(|e| providers::SvError::new("local", e.to_string()))??;
                     Ok(r.text)
                 } else {
-                    providers::transcribe(providers::SttReq { provider: &p, api_key: &key, base_url: &base, model: &model, language: &lang, prompt: &prompt, wav: wav::encode_wav(&pcm) }).await
+                    providers::transcribe(providers::SttReq {
+                        provider: &p,
+                        api_key: &key,
+                        base_url: &base,
+                        model: &model,
+                        language: &lang,
+                        prompt: &prompt,
+                        wav: wav::encode_wav(&pcm),
+                    })
+                    .await
                 }
             })
         }),
         complete: Arc::new(move |system, user| {
-            let (p, key, base, model, tempo) = (llm_provider.clone(), llm_key.clone(), llm_base.clone(), llm_model.clone(), tempo.clone());
-            Box::pin(async move { providers::complete(providers::LlmReq { provider: &p, api_key: &key, base_url: &base, model: &model, tempo: &tempo, system: &system, user: &user }).await })
+            let (p, key, base, model, tempo) = (
+                llm_provider.clone(),
+                llm_key.clone(),
+                llm_base.clone(),
+                llm_model.clone(),
+                tempo.clone(),
+            );
+            Box::pin(async move {
+                providers::complete(providers::LlmReq {
+                    provider: &p,
+                    api_key: &key,
+                    base_url: &base,
+                    model: &model,
+                    tempo: &tempo,
+                    system: &system,
+                    user: &user,
+                })
+                .await
+            })
         }),
         insert: Arc::new(move |text| {
             let method = method.clone();
@@ -662,7 +941,9 @@ fn make_deps(cfg: &Value, id: u64, stt_provider: &str, llm_provider: &str, model
                 *st().last_text.lock().unwrap() = text.clone();
                 let ins = st().inserter.clone();
                 let t2 = text.clone();
-                let r = tauri::async_runtime::spawn_blocking(move || ins.insert(&t2, &method, restore)).await;
+                let r =
+                    tauri::async_runtime::spawn_blocking(move || ins.insert(&t2, &method, restore))
+                        .await;
                 if !matches!(r, Ok(Ok(()))) {
                     log(format!("insert failed: {r:?}"));
                     if let Ok(mut cb) = arboard::Clipboard::new() {
@@ -692,7 +973,9 @@ pub fn stop_dictation() {
     update_tray();
     let id = st().rec.lock().unwrap().id;
     overlay_event(json!({ "id": id, "type": "state", "state": "processing" }));
-    let _ = st().handle.emit_to("overlay", "rec:stop", json!({ "id": id }));
+    let _ = st()
+        .handle
+        .emit_to("overlay", "rec:stop", json!({ "id": id }));
     if let Some(r) = rec {
         std::thread::spawn(move || r.stop());
     }
@@ -712,7 +995,9 @@ pub fn cancel_dictation() {
         std::thread::spawn(move || r.stop());
     }
     update_tray();
-    let _ = st().handle.emit_to("overlay", "rec:cancel", json!({ "id": id }));
+    let _ = st()
+        .handle
+        .emit_to("overlay", "rec:cancel", json!({ "id": id }));
     hide_overlay_soon(150);
 }
 
@@ -725,38 +1010,80 @@ async fn finish_session(sess: Arc<session::Session>) {
     }
     let (command, app_name, started) = {
         let r = s.rec.lock().unwrap();
-        (r.command.clone().filter(|_| r.id == id), r.app_name.clone(), r.started)
+        (
+            r.command.clone().filter(|_| r.id == id),
+            r.app_name.clone(),
+            r.started,
+        )
     };
     let was_command = command.is_some();
     let mut outcome = match res {
         Ok(o) => o,
         Err(e) => {
             log(format!("finish: {e}"));
-            overlay_event(json!({ "id": id, "type": "error", "code": e.code, "message": e.message }));
+            overlay_event(
+                json!({ "id": id, "type": "error", "code": e.code, "message": e.message }),
+            );
             schedule_unload(&sess);
             return;
         }
     };
     if let Some(c) = command.filter(|_| !outcome.raw.is_empty()) {
-        overlay_event(json!({ "id": id, "type": "state", "state": "processing", "text": outcome.raw }));
+        overlay_event(
+            json!({ "id": id, "type": "state", "state": "processing", "text": outcome.raw }),
+        );
         let cfg = s.settings.lock().unwrap().data.clone();
-        let p = prompts::build_command(&outcome.raw, &c.selection, &sess.cfg.ai.style, &sess.cfg.ai.vocabulary, &sess.cfg.ai.custom_instruction);
-        match (make_deps(&cfg, id, "", &resolve_llm(&cfg), &sess.models, &cfg.s("/dictation/insert"), false).complete)(p.system, p.user).await {
+        let p = prompts::build_command(
+            &outcome.raw,
+            &c.selection,
+            &sess.cfg.ai.style,
+            &sess.cfg.ai.vocabulary,
+            &sess.cfg.ai.custom_instruction,
+        );
+        match (make_deps(
+            &cfg,
+            id,
+            "",
+            &resolve_llm(&cfg),
+            &sess.models,
+            &cfg.s("/dictation/insert"),
+            false,
+        )
+        .complete)(p.system, p.user)
+        .await
+        {
             Ok(out) => {
                 let out = prompts::clean_model_output(&out);
                 if !out.is_empty() && !sess.cancelled.load(Ordering::SeqCst) {
-                    let method = if accessibility_ok() { cfg.s("/dictation/insert") } else { "copy".into() };
+                    let method = if accessibility_ok() {
+                        cfg.s("/dictation/insert")
+                    } else {
+                        "copy".into()
+                    };
                     let restore = cfg.b("/dictation/restoreClipboard");
                     let ins = s.inserter.clone();
                     let o2 = out.clone();
-                    let _ = tauri::async_runtime::spawn_blocking(move || ins.insert(&o2, &method, restore)).await;
+                    let _ = tauri::async_runtime::spawn_blocking(move || {
+                        ins.insert(&o2, &method, restore)
+                    })
+                    .await;
                     *s.last_text.lock().unwrap() = out.clone();
                 }
-                outcome.raw = if c.selection.is_empty() { outcome.raw } else { format!("{}\n\n— {}", outcome.raw, c.selection.chars().take(500).collect::<String>()) };
+                outcome.raw = if c.selection.is_empty() {
+                    outcome.raw
+                } else {
+                    format!(
+                        "{}\n\n— {}",
+                        outcome.raw,
+                        c.selection.chars().take(500).collect::<String>()
+                    )
+                };
                 outcome.text = out;
             }
             Err(e) => {
-                overlay_event(json!({ "id": id, "type": "error", "code": e.code, "message": e.message }));
+                overlay_event(
+                    json!({ "id": id, "type": "error", "code": e.code, "message": e.message }),
+                );
                 schedule_unload(&sess);
                 return;
             }
@@ -765,7 +1092,11 @@ async fn finish_session(sess: Arc<session::Session>) {
     if !outcome.text.is_empty() {
         let cfg = s.settings.lock().unwrap().data.clone();
         if cfg.b("/history/keep") {
-            let mode = if was_command { "command".to_string() } else { sess.cfg.mode.clone() };
+            let mode = if was_command {
+                "command".to_string()
+            } else {
+                sess.cfg.mode.clone()
+            };
             s.history.lock().unwrap().add(
                 json!({
                     "text": outcome.text, "raw": if outcome.raw != outcome.text { json!(outcome.raw) } else { Value::Null },
@@ -806,7 +1137,12 @@ fn schedule_unload(sess: &session::Session) {
     if !sess.models.pipeline {
         return;
     }
-    let min = st().settings.lock().unwrap().data.n("/services/local/keepLoadedMin");
+    let min = st()
+        .settings
+        .lock()
+        .unwrap()
+        .data
+        .n("/services/local/keepLoadedMin");
     if min <= 0.0 {
         return;
     }
@@ -833,7 +1169,13 @@ pub fn self_test(key: &str) -> Value {
     let eng = st().engine.clone();
     let (samples, _) = wav::decode_wav(local::SELFTEST_WAV).unwrap_or_default();
     let pcm: Vec<i16> = samples.iter().map(|v| (v * 32767.0) as i16).collect();
-    let ok = |t: &str| local::SELFTEST_WORDS.iter().filter(|w| t.to_lowercase().contains(*w)).count() >= 2;
+    let ok = |t: &str| {
+        local::SELFTEST_WORDS
+            .iter()
+            .filter(|w| t.to_lowercase().contains(*w))
+            .count()
+            >= 2
+    };
     let gpu_wanted = st().settings.lock().unwrap().data.b("/services/local/gpu");
     let mut tries = vec![gpu_wanted];
     if gpu_wanted {
@@ -844,7 +1186,10 @@ pub fn self_test(key: &str) -> Value {
         match eng.transcribe(key, gpu, &pcm, "en", "", false) {
             Ok(t) if ok(&t.text) => {
                 if gpu_wanted && !gpu {
-                    st().settings.lock().unwrap().update(&json!({ "services": { "local": { "gpu": false } } }));
+                    st().settings
+                        .lock()
+                        .unwrap()
+                        .update(&json!({ "services": { "local": { "gpu": false } } }));
                 }
                 return json!({ "ok": true, "text": t.text, "ms": t.ms, "gpu": t.gpu });
             }
@@ -870,15 +1215,23 @@ async fn local_download(key: String) -> Value {
             })
             .await
     };
-    *s.download.lock().unwrap() = json!({ "downloading": "", "progress": 0, "loaded": 0, "total": 0 });
+    *s.download.lock().unwrap() =
+        json!({ "downloading": "", "progress": 0, "loaded": 0, "total": 0 });
     if let Err(e) = res {
-        local_event(json!({ "type": if e.code == "cancelled" { "cancelled" } else { "error" }, "message": e.message }));
+        local_event(
+            json!({ "type": if e.code == "cancelled" { "cancelled" } else { "error" }, "message": e.message }),
+        );
         return json!({ "ok": false, "message": e.message, "offline": e.code == "network" });
     }
-    s.settings.lock().unwrap().update(&json!({ "services": { "local": { "model": m.key } } }));
+    s.settings
+        .lock()
+        .unwrap()
+        .update(&json!({ "services": { "local": { "model": m.key } } }));
     local_event(json!({ "type": "testing" }));
     let k = m.key.to_string();
-    let test = tauri::async_runtime::spawn_blocking(move || self_test(&k)).await.unwrap_or(json!({ "ok": false }));
+    let test = tauri::async_runtime::spawn_blocking(move || self_test(&k))
+        .await
+        .unwrap_or(json!({ "ok": false }));
     local_event(json!({ "type": "ready", "test": test }));
     settings_changed();
     json!({ "ok": true, "test": test })
@@ -896,8 +1249,18 @@ fn snapshot() -> Value {
         .iter()
         .filter_map(|k| providers::llm_info(k).map(|i| (k.to_string(), json!({ "label": i.label, "models": i.models, "main": { "fast": i.main[0], "balanced": i.main[1], "best": i.main[2] }, "baseUrl": i.base_url, "keyOptional": i.key_optional, "keyUrl": i.key_url }))))
         .collect();
-    let models: serde_json::Map<String, Value> = local::MODELS.iter().map(|m| (m.key.to_string(), json!({ "sizeMB": m.size_mb, "ramGB": m.ram_gb }))).collect();
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let models: serde_json::Map<String, Value> = local::MODELS
+        .iter()
+        .map(|m| {
+            (
+                m.key.to_string(),
+                json!({ "sizeMB": m.size_mb, "ramGB": m.ram_gb }),
+            )
+        })
+        .collect();
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
     let apple_silicon = cfg!(all(target_os = "macos", target_arch = "aarch64"));
     json!({
         "settings": settings,
@@ -924,7 +1287,10 @@ fn arg(args: &[Value], i: usize) -> Value {
     args.get(i).cloned().unwrap_or(Value::Null)
 }
 fn arg_s(args: &[Value], i: usize) -> String {
-    args.get(i).and_then(|v| v.as_str()).unwrap_or("").to_string()
+    args.get(i)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 #[tauri::command]
@@ -960,7 +1326,14 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
         "hotkey:check" => {
             let accel = arg_s(args, 0);
             let cfg = s.settings.lock().unwrap().data.clone();
-            if accel.is_empty() || [cfg.s("/hotkey/toggle"), cfg.s("/hotkey/command"), cfg.s("/hotkey/cancel")].contains(&accel) {
+            if accel.is_empty()
+                || [
+                    cfg.s("/hotkey/toggle"),
+                    cfg.s("/hotkey/command"),
+                    cfg.s("/hotkey/cancel"),
+                ]
+                .contains(&accel)
+            {
                 return Ok(json!(true));
             }
             let ok = accel.parse::<Shortcut>().ok().map(|sc| {
@@ -973,7 +1346,10 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
         }
         "service:test" => service_test(&arg_s(args, 0), &arg_s(args, 1)).await,
         "dictation:toggle" => {
-            toggle_dictation(StartOpts { how: "button".into(), command: false });
+            toggle_dictation(StartOpts {
+                how: "button".into(),
+                command: false,
+            });
             Value::Null
         }
         "dictation:cancel" => {
@@ -1000,8 +1376,11 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
         "perm:request" => {
             #[cfg(target_os = "macos")]
             {
-                let _ = macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
-                open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+                let _ =
+                    macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
+                open_url(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                );
             }
             json!({ "accessibility": accessibility_ok() })
         }
@@ -1016,7 +1395,9 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
             }
             Value::Null
         }
-        "local:status" => json!({ "ok": true, "downloaded": s.engine.downloaded_sizes(), "status": s.download.lock().unwrap().clone() }),
+        "local:status" => {
+            json!({ "ok": true, "downloaded": s.engine.downloaded_sizes(), "status": s.download.lock().unwrap().clone() })
+        }
         "local:download" => local_download(arg_s(args, 0)).await,
         "local:cancel" => {
             s.engine.cancel_download();
@@ -1028,8 +1409,12 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
             Value::Null
         }
         "local:selftest" => {
-            let key = local::model(&s.settings.lock().unwrap().str("/services/local/model")).key.to_string();
-            tauri::async_runtime::spawn_blocking(move || self_test(&key)).await.unwrap_or(json!({ "ok": false }))
+            let key = local::model(&s.settings.lock().unwrap().str("/services/local/model"))
+                .key
+                .to_string();
+            tauri::async_runtime::spawn_blocking(move || self_test(&key))
+                .await
+                .unwrap_or(json!({ "ok": false }))
         }
         "mic:list" => json!(audio::list_inputs()),
         "mic:test" => {
@@ -1041,15 +1426,29 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
             if start {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let dev = s.settings.lock().unwrap().str("/dictation/micId");
-                *s.mic_test.lock().unwrap() = Some(audio::Recorder::start(audio::RecOpts { device: dev, pause_ms: 800, sensitivity: 50, vad: false }, tx));
+                *s.mic_test.lock().unwrap() = Some(audio::Recorder::start(
+                    audio::RecOpts {
+                        device: dev,
+                        pause_ms: 800,
+                        sensitivity: 50,
+                        vad: false,
+                    },
+                    tx,
+                ));
                 std::thread::spawn(move || {
                     while let Ok(m) = rx.recv() {
                         match m {
                             audio::AudioMsg::Level { level, .. } => {
-                                let _ = st().handle.emit_to("main", "mic:level", json!({ "level": level }));
+                                let _ = st().handle.emit_to(
+                                    "main",
+                                    "mic:level",
+                                    json!({ "level": level }),
+                                );
                             }
                             audio::AudioMsg::Error(e) => {
-                                let _ = st().handle.emit_to("main", "mic:level", json!({ "error": e }));
+                                let _ =
+                                    st().handle
+                                        .emit_to("main", "mic:level", json!({ "error": e }));
                             }
                             audio::AudioMsg::Ended => break,
                             _ => {}
@@ -1063,7 +1462,9 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
             // „Diese App hinzufügen“: kurz warten, bis man in die gewünschte App gewechselt hat
             tokio::time::sleep(Duration::from_millis(3000)).await;
             let ins = s.inserter.clone();
-            let name = tauri::async_runtime::spawn_blocking(move || ins.foreground_app()).await.unwrap_or_default();
+            let name = tauri::async_runtime::spawn_blocking(move || ins.foreground_app())
+                .await
+                .unwrap_or_default();
             remember_app(&name);
             json!(name)
         }
@@ -1112,22 +1513,46 @@ async fn service_test(kind: &str, provider: &str) -> Value {
                 return Err(providers::SvError::new("local_missing", "not downloaded"));
             }
             let key = r.models.stt_main.clone();
-            let t = tauri::async_runtime::spawn_blocking(move || self_test(&key)).await.unwrap_or(json!({ "ok": false }));
+            let t = tauri::async_runtime::spawn_blocking(move || self_test(&key))
+                .await
+                .unwrap_or(json!({ "ok": false }));
             if t["ok"] != true {
-                return Err(providers::SvError::new("local", t["text"].as_str().unwrap_or("").to_string()));
+                return Err(providers::SvError::new(
+                    "local",
+                    t["text"].as_str().unwrap_or("").to_string(),
+                ));
             }
             Ok(())
         } else if kind == "stt" {
             // 0,6 s leises Rauschen – es geht nur darum, ob Schlüssel, Adresse und Modell stimmen
             let pcm: Vec<i16> = (0..9600).map(|_| rand::random::<i16>() % 30).collect();
             let key = st().secrets.lock().unwrap().get(&r.stt_provider);
-            providers::transcribe(providers::SttReq { provider: &r.stt_provider, api_key: &key, base_url: &cfg.s("/services/stt/baseUrl"), model: &r.models.stt_main, language: &cfg.s("/dictation/language"), prompt: "", wav: wav::encode_wav(&pcm) }).await.map(|_| ())
+            providers::transcribe(providers::SttReq {
+                provider: &r.stt_provider,
+                api_key: &key,
+                base_url: &cfg.s("/services/stt/baseUrl"),
+                model: &r.models.stt_main,
+                language: &cfg.s("/dictation/language"),
+                prompt: "",
+                wav: wav::encode_wav(&pcm),
+            })
+            .await
+            .map(|_| ())
         } else {
             if r.llm_provider.is_empty() {
                 return Err(providers::SvError::new("no_key", "no provider"));
             }
             let key = st().secrets.lock().unwrap().get(&r.llm_provider);
-            let out = providers::complete(providers::LlmReq { provider: &r.llm_provider, api_key: &key, base_url: &cfg.s("/services/llm/baseUrl"), model: &r.models.llm_model, tempo: &cfg.s("/dictation/tempo"), system: "Reply with the single word OK.", user: "Ping" }).await?;
+            let out = providers::complete(providers::LlmReq {
+                provider: &r.llm_provider,
+                api_key: &key,
+                base_url: &cfg.s("/services/llm/baseUrl"),
+                model: &r.models.llm_model,
+                tempo: &cfg.s("/dictation/tempo"),
+                system: "Reply with the single word OK.",
+                user: "Ping",
+            })
+            .await?;
             if out.is_empty() {
                 return Err(providers::SvError::new("empty", "empty"));
             }
@@ -1137,7 +1562,9 @@ async fn service_test(kind: &str, provider: &str) -> Value {
     .await;
     match res {
         Ok(()) => json!({ "ok": true, "ms": t0.elapsed().as_millis() as u64 }),
-        Err(e) => json!({ "ok": false, "code": e.code, "message": e.message.chars().take(300).collect::<String>() }),
+        Err(e) => {
+            json!({ "ok": false, "code": e.code, "message": e.message.chars().take(300).collect::<String>() })
+        }
     }
 }
 
@@ -1155,17 +1582,32 @@ fn apply_autostart() {
 pub fn run() {
     let mut builder = tauri::Builder::default();
     if !is_test() {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| show_settings(None)));
+        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+            show_settings(None)
+        }));
     }
     builder
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
-        .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(|_app, sc, ev| on_shortcut(sc, ev.state())).build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|_app, sc, ev| on_shortcut(sc, ev.state()))
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![call])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            let dir = std::env::var("SLIMVOICE_USERDATA").map(PathBuf::from).unwrap_or_else(|_| app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            let dir = std::env::var("SLIMVOICE_USERDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| {
+                    app.path()
+                        .app_data_dir()
+                        .unwrap_or_else(|_| PathBuf::from("."))
+                });
             let _ = std::fs::create_dir_all(&dir);
             let state = Arc::new(State {
                 handle: app.handle().clone(),
@@ -1174,46 +1616,81 @@ pub fn run() {
                 history: Mutex::new(store::History::load(dir.join("history.json"))),
                 engine: Arc::new(local::Engine::new(dir.join("models"))),
                 inserter: Arc::new(inserter::Inserter::new()),
-                rec: Mutex::new(Rec { recording: false, id: 0, session: None, recorder: None, command: None, app_name: String::new(), started: None }),
+                rec: Mutex::new(Rec {
+                    recording: false,
+                    id: 0,
+                    session: None,
+                    recorder: None,
+                    command: None,
+                    app_name: String::new(),
+                    started: None,
+                }),
                 hold: Mutex::new(keyhold::KeyHold::new(350)),
                 shortcuts: Mutex::new(HashMap::new()),
                 hotkey_ok: Mutex::new(json!({})),
                 last_text: Mutex::new(String::new()),
-                download: Mutex::new(json!({ "downloading": "", "progress": 0, "loaded": 0, "total": 0 })),
+                download: Mutex::new(
+                    json!({ "downloading": "", "progress": 0, "loaded": 0, "total": 0 }),
+                ),
                 unload_gen: AtomicU64::new(0),
                 mic_test: Mutex::new(None),
                 last_access: AtomicBool::new(accessibility_ok()),
                 dir,
             });
             let _ = STATE.set(state);
+            let step = |name: &str| {
+                if is_test() {
+                    eprintln!("[slimvoice] setup: {name}");
+                }
+            };
+            if is_test() {
+                control::start();
+            }
+            step("overlay");
             create_overlay(app.handle());
+            step("tray");
             let menu = build_menu(app.handle())?;
-            TrayIconBuilder::with_id("main")
-                .icon(tray_icon(false))
-                .icon_as_template(cfg!(target_os = "macos"))
-                .menu(&menu)
-                .show_menu_on_left_click(cfg!(target_os = "macos"))
-                .on_menu_event(|_app, e| on_menu(e.id.as_ref()))
-                .on_tray_icon_event(|_tray, e| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
-                        if !cfg!(target_os = "macos") {
-                            show_settings(None);
+            if std::env::var("SLIMVOICE_NO_TRAY").is_err() {
+                TrayIconBuilder::with_id("main")
+                    .icon(tray_icon(false))
+                    .icon_as_template(cfg!(target_os = "macos"))
+                    .menu(&menu)
+                    .show_menu_on_left_click(cfg!(target_os = "macos"))
+                    .on_menu_event(|_app, e| on_menu(e.id.as_ref()))
+                    .on_tray_icon_event(|_tray, e| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = e
+                        {
+                            if !cfg!(target_os = "macos") {
+                                show_settings(None);
+                            }
                         }
-                    }
-                })
-                .build(app)?;
+                    })
+                    .build(app)?;
+            }
+            step("shortcuts");
             register_shortcuts();
             apply_autostart();
             update_tray();
+            step("windows");
 
             let cfg = st().settings.lock().unwrap().data.clone();
             let hidden = std::env::args().any(|a| a == "--hidden");
             if !hidden || !cfg.b("/onboarded") {
-                show_settings(if cfg.b("/onboarded") { None } else { Some("welcome") });
+                show_settings(if cfg.b("/onboarded") {
+                    None
+                } else {
+                    Some("welcome")
+                });
             }
             // Lokales Modell schon mal laden, damit das erste Diktat nicht warten muss
             if cfg.s("/services/stt/provider") == "local" && local_ready(&cfg) && !is_test() {
-                let key = local::model(&cfg.s("/services/local/model")).key.to_string();
+                let key = local::model(&cfg.s("/services/local/model"))
+                    .key
+                    .to_string();
                 let gpu = cfg.b("/services/local/gpu");
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(3));
@@ -1225,19 +1702,24 @@ pub fn run() {
                 std::thread::sleep(Duration::from_millis(1000));
                 let now = accessibility_ok();
                 if st().last_access.swap(now, Ordering::SeqCst) != now {
-                    let _ = st().handle.emit_to("main", "perm:changed", json!({ "accessibility": now }));
+                    let _ = st().handle.emit_to(
+                        "main",
+                        "perm:changed",
+                        json!({ "accessibility": now }),
+                    );
                 }
             });
-            if is_test() {
-                control::start();
-            }
+            step("ready");
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("SlimVoice konnte nicht starten")
         .run(|_app, event| {
             // Fenster zu ≠ App zu: SlimVoice läuft im Hintergrund weiter
-            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {
+            if let tauri::RunEvent::ExitRequested {
+                api, code: None, ..
+            } = event
+            {
                 api.prevent_exit();
             }
         });

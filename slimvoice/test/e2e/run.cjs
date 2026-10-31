@@ -147,8 +147,9 @@ function startServer() {
   const recording = async () => (await ctl('/state')).recording;
 
   try {
-    await waitFor(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').length > 0, 20000, 'App startet');
+    await waitFor(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').length > 0, 60000, 'App startet');
     base = `http://127.0.0.1:${fs.readFileSync(portFile, 'utf8')}`;
+    await waitFor(() => /setup: ready/.test(appLog), 60000, 'App fertig eingerichtet');
     await sleep(2500); // Fenster aufbauen lassen
     shot('settings-1-start');
     for (const page of ['dictation', 'words', 'ai', 'services', 'general']) {

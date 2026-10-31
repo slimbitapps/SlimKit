@@ -78,7 +78,10 @@ impl Segmenter {
         }
         self.frames += 1;
         if self.frames % self.level_every == 0 {
-            out.push(VadEvent::Level { level: (rms / (th * 3.0).max(0.03)).min(1.0), speaking: self.seg.is_some() });
+            out.push(VadEvent::Level {
+                level: (rms / (th * 3.0).max(0.03)).min(1.0),
+                speaking: self.seg.is_some(),
+            });
         }
 
         if self.seg.is_none() {
@@ -105,7 +108,8 @@ impl Segmenter {
         let len_ms = seg.len() as f32 * FRAME_MS;
         let pause = self.silent as f32 * FRAME_MS >= self.pause_ms;
         // sehr lange ohne Pause: an einer leiseren Stelle schneiden
-        let too_long = len_ms >= MAX_SEGMENT_MS && (rms < th * 1.5 || len_ms >= MAX_SEGMENT_MS + 4000.0);
+        let too_long =
+            len_ms >= MAX_SEGMENT_MS && (rms < th * 1.5 || len_ms >= MAX_SEGMENT_MS + 4000.0);
         if pause || too_long {
             self.end_segment(out);
         }
@@ -125,7 +129,10 @@ impl Segmenter {
         if rms < MIN_SEGMENT_RMS {
             return;
         }
-        let pcm = samples.iter().map(|v| (v.clamp(-1.0, 1.0) * 32767.0) as i16).collect();
+        let pcm = samples
+            .iter()
+            .map(|v| (v.clamp(-1.0, 1.0) * 32767.0) as i16)
+            .collect();
         out.push(VadEvent::Segment(pcm));
     }
 
@@ -146,7 +153,11 @@ pub struct Resampler {
 
 impl Resampler {
     pub fn new(from_rate: u32) -> Self {
-        Self { ratio: from_rate as f64 / RATE as f64, pos: 0.0, prev: Vec::new() }
+        Self {
+            ratio: from_rate as f64 / RATE as f64,
+            pos: 0.0,
+            prev: Vec::new(),
+        }
     }
     pub fn process(&mut self, input: &[f32]) -> Vec<f32> {
         if (self.ratio - 1.0).abs() < 1e-9 {
@@ -175,7 +186,9 @@ mod tests {
     use super::*;
 
     fn tone(ms: usize, amp: f32) -> Vec<f32> {
-        (0..RATE * ms / 1000).map(|i| amp * ((i as f32) * 0.07).sin()).collect()
+        (0..RATE * ms / 1000)
+            .map(|i| amp * ((i as f32) * 0.07).sin())
+            .collect()
     }
 
     #[test]
@@ -188,7 +201,16 @@ mod tests {
         s.push(&tone(800, 0.3), &mut ev);
         s.push(&vec![0.0005; RATE / 4], &mut ev);
         s.finish(&mut ev);
-        let segs: Vec<usize> = ev.iter().filter_map(|e| if let VadEvent::Segment(p) = e { Some(p.len()) } else { None }).collect();
+        let segs: Vec<usize> = ev
+            .iter()
+            .filter_map(|e| {
+                if let VadEvent::Segment(p) = e {
+                    Some(p.len())
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(segs.len(), 2, "{segs:?}");
         // ~1,2 s Ton + Vorlauf + etwas Stille, aber nicht die ganze Sekunde Pause
         assert!(segs[0] > RATE && segs[0] < RATE * 2, "{}", segs[0]);
