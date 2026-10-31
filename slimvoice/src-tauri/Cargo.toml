@@ -1,6 +1,6 @@
 [package]
 name = "slimvoice"
-version = "0.3.0"
+version = "0.3.1"
 description = "SlimVoice – dictation that works, in every app"
 authors = ["SlimBit Apps"]
 edition = "2021"
@@ -45,7 +45,6 @@ macos-accessibility-client = "0.0.1"
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
 strip = true
 
 [profile.release.package.whisper-rs-sys]

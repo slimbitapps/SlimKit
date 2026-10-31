@@ -147,7 +147,7 @@ impl Engine {
     }
 
     pub fn delete(&self, key: &str) {
-        let mut g = self.ctx.lock().unwrap();
+        let mut g = self.ctx.lock().unwrap_or_else(|e| e.into_inner());
         if g.as_ref().map(|(k, _, _)| k == key).unwrap_or(false) {
             *g = None;
         }
@@ -155,7 +155,7 @@ impl Engine {
     }
 
     pub fn unload(&self) {
-        *self.ctx.lock().unwrap() = None;
+        *self.ctx.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     pub fn loaded(&self) -> Option<(String, bool)> {
@@ -168,7 +168,7 @@ impl Engine {
 
     /// Modell in den Speicher laden (blockiert – im Hintergrund-Thread aufrufen)
     pub fn load(&self, key: &str, gpu: bool) -> Result<(), SvError> {
-        let mut g = self.ctx.lock().unwrap();
+        let mut g = self.ctx.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((k, gg, _)) = g.as_ref() {
             if k == key && *gg == gpu {
                 return Ok(());
@@ -180,7 +180,8 @@ impl Engine {
         }
         let mut params = WhisperContextParameters::default();
         params.use_gpu = gpu;
-        params.flash_attn = gpu;
+        // Flash-Attention aus: auf manchen Macs instabil, Gewinn bei kurzen Diktaten minimal
+        params.flash_attn = false;
         let path = self.path(key);
         let ctx = WhisperContext::new_with_params(&path.to_string_lossy(), params)
             .map_err(|e| SvError::new("local", format!("{e:?}")))?;
@@ -189,58 +190,31 @@ impl Engine {
     }
 
     /// Sprache → Text (blockiert). language: „de“, „en“ … oder „auto“; prompt: Fachbegriffe/Zusammenhang.
-    pub fn transcribe(
-        &self,
-        key: &str,
-        gpu: bool,
-        pcm: &[i16],
-        language: &str,
-        prompt: &str,
-        best: bool,
-    ) -> Result<Transcript, SvError> {
+    /// Schutz gegen Hänger: begrenzte Länge der Ausgabe, keine Wiederholungs-Versuche, harte Zeitgrenze.
+    pub fn transcribe(&self, key: &str, gpu: bool, pcm: &[i16], language: &str, prompt: &str, best: bool) -> Result<Transcript, SvError> {
         let t0 = std::time::Instant::now();
         let audio: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
         // fast nur Stille → gar nicht erst rechnen (verhindert erfundene Sätze)
         let rms = (audio.iter().map(|v| v * v).sum::<f32>() / audio.len().max(1) as f32).sqrt();
         if audio.len() < 3200 || rms < 0.002 {
-            return Ok(Transcript {
-                text: String::new(),
-                ms: 0,
-                gpu,
-            });
+            return Ok(Transcript { text: String::new(), ms: 0, gpu });
         }
+        let secs = audio.len() as f32 / 16_000.0;
         // Whisper braucht mindestens ~1 s – kurze Abschnitte mit Stille auffüllen
         let mut audio = audio;
         if audio.len() < 16_000 + 1600 {
             audio.resize(16_000 + 1600, 0.0);
         }
         self.load(key, gpu)?;
-        let g = self.ctx.lock().unwrap();
-        let (_, used_gpu, ctx) = g
-            .as_ref()
-            .ok_or_else(|| SvError::new("local", "not loaded"))?;
-        let mut state = ctx
-            .create_state()
-            .map_err(|e| SvError::new("local", format!("{e:?}")))?;
-        let strategy = if best {
-            SamplingStrategy::BeamSearch {
-                beam_size: 5,
-                patience: -1.0,
-            }
-        } else {
-            SamplingStrategy::Greedy { best_of: 1 }
-        };
+        let g = self.ctx.lock().unwrap_or_else(|e| e.into_inner());
+        let (_, used_gpu, ctx) = g.as_ref().ok_or_else(|| SvError::new("local", "not loaded"))?;
+        let mut state = ctx.create_state().map_err(|e| SvError::new("local", format!("{e:?}")))?;
+        let strategy = if best { SamplingStrategy::BeamSearch { beam_size: 3, patience: -1.0 } } else { SamplingStrategy::Greedy { best_of: 1 } };
         let mut p = FullParams::new(strategy);
-        let threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .clamp(1, 8);
-        p.set_n_threads(threads as i32);
-        let lang = if language.is_empty() {
-            "auto"
-        } else {
-            language
-        };
+        // Hälfte der Kerne: kaum langsamer, aber der Rechner bleibt ruhig und bedienbar
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        p.set_n_threads((cores / 2).clamp(2, 8) as i32);
+        let lang = if language.is_empty() { "auto" } else { language };
         p.set_language(Some(lang));
         p.set_translate(false);
         p.set_no_context(true);
@@ -251,17 +225,38 @@ impl Engine {
         p.set_print_progress(false);
         p.set_print_realtime(false);
         p.set_print_timestamps(false);
+        // Kurze Aufnahme → nur so viel Audio-Kontext rechnen wie nötig (Whisper rechnet sonst immer 30 s)
+        if secs < 28.0 {
+            let ctx_frames = ((secs.max(1.1) * 50.0) as i32 + 128).clamp(384, 1500);
+            p.set_audio_ctx(ctx_frames);
+            p.set_single_segment(true);
+        }
+        // Keine Wiederholungs-Versuche mit höherer „Temperatur“ – die erzeugen bei Rauschen Endlosschleifen
         p.set_temperature(0.0);
-        p.set_temperature_inc(0.2);
-        p.set_entropy_thold(2.4);
-        p.set_logprob_thold(-1.0);
+        p.set_temperature_inc(0.0);
+        // Höchstens so viele Wörter, wie man in der Zeit sprechen kann (≈ 3 Wörter/s, ≈ 2 Token/Wort)
+        p.set_max_tokens(((secs * 8.0) as i32 + 24).clamp(32, 448));
         p.set_no_speech_thold(0.6);
         if !prompt.is_empty() {
             p.set_initial_prompt(prompt);
         }
-        state
-            .full(p, &audio)
-            .map_err(|e| SvError::new("local", format!("{e:?}")))?;
+        // Harte Zeitgrenze: lieber abbrechen und Bescheid sagen als den Rechner minutenlang blockieren
+        let limit = std::time::Duration::from_secs_f32((secs * 6.0).max(25.0));
+        let started = std::time::Instant::now();
+        let aborted = std::sync::Arc::new(AtomicBool::new(false));
+        let ab2 = aborted.clone();
+        p.set_abort_callback_safe(move || {
+            let over = started.elapsed() > limit;
+            if over {
+                ab2.store(true, Ordering::SeqCst);
+            }
+            over
+        });
+        let res = state.full(p, &audio);
+        if aborted.load(Ordering::SeqCst) {
+            return Err(SvError::new("local_slow", format!("{:.0} s", limit.as_secs_f32())));
+        }
+        res.map_err(|e| SvError::new("local", format!("{e:?}")))?;
         let mut text = String::new();
         for i in 0..state.full_n_segments() {
             if let Some(seg) = state.get_segment(i) {
@@ -274,11 +269,46 @@ impl Engine {
                 }
             }
         }
-        Ok(Transcript {
-            text: text.trim().to_string(),
-            ms: t0.elapsed().as_millis(),
-            gpu: *used_gpu,
-        })
+        Ok(Transcript { text: collapse_repeats(text.trim()), ms: t0.elapsed().as_millis(), gpu: *used_gpu })
+    }
+}
+
+/// Endlosschleifen entfernen („Das ist das erste Mal. Das ist das erste Mal. …“ → einmal)
+pub fn collapse_repeats(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() < 6 {
+        return text.to_string();
+    }
+    let mut out: Vec<&str> = Vec::new();
+    let mut i = 0;
+    'outer: while i < words.len() {
+        // gleiche Wortfolge (1–8 Wörter) direkt mehrfach hintereinander → nur einmal behalten
+        for n in (1..=8).rev() {
+            if i + 2 * n <= words.len() && words[i..i + n] == words[i + n..i + 2 * n] {
+                let mut j = i + n;
+                while j + n <= words.len() && words[i..i + n] == words[j..j + n] {
+                    j += n;
+                }
+                if (j - i) / n >= 3 {
+                    out.extend_from_slice(&words[i..i + n]);
+                    i = j;
+                    continue 'outer;
+                }
+            }
+        }
+        out.push(words[i]);
+        i += 1;
+    }
+    out.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn schleifen_werden_entfernt() {
+        assert_eq!(super::collapse_repeats("Das ist das erste Mal. Das ist das erste Mal. Das ist das erste Mal. Das ist das erste Mal."), "Das ist das erste Mal.");
+        assert_eq!(super::collapse_repeats("ja ja das ist gut so"), "ja ja das ist gut so");
+        assert_eq!(super::collapse_repeats("Hallo Welt, wie geht es dir heute so?"), "Hallo Welt, wie geht es dir heute so?");
     }
 }
 

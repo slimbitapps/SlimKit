@@ -168,7 +168,7 @@ export function LocalModels({ compact }: { compact?: boolean }) {
       {test && (
         <div className={'banner ' + (test.ok ? 'ok' : 'bad')}>
           {test.ok
-            ? `✓ ${L('Erkennung funktioniert', 'Recognition works')} (${L('Probe erkannt als', 'sample recognised as')} „${test.text}“${test.ms ? `, ${(test.ms / 1000).toFixed(1)} s` : ''}${test.gpu ? `, ${L('mit Grafikbeschleunigung', 'with graphics acceleration')}` : ''})`
+            ? `✓ ${L('Erkennung funktioniert', 'Recognition works')} (${L('Probe erkannt als', 'sample recognised as')} „${test.text}“${test.ms ? `, ${(test.ms / 1000).toFixed(1)} s` : ''}${test.gpu ? `, ${L('mit Grafikbeschleunigung', 'with graphics acceleration')}` : ''})${(test.ms || 0) > 6000 ? ' – ' + L('auf deinem Rechner recht langsam. Tipp: ein kleineres Modell wählen.', 'quite slow on your computer. Tip: choose a smaller model.') : ''}`
             : `${L('Selbsttest fehlgeschlagen – bitte ein anderes Modell probieren.', 'Self-test failed – please try another model.')} (${test.text})`}
         </div>
       )}

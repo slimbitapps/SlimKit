@@ -190,7 +190,7 @@ fn resolve(cfg: &Value) -> Resolved {
                 stt_preview: key,
                 max_seconds: 1800,
                 llm_model,
-                pipeline: true,
+                pipeline: false,
             },
             llm_provider,
         };
@@ -605,6 +605,17 @@ pub struct StartOpts {
     pub command: bool,
 }
 
+/// Lokal rechnet SlimVoice nur einmal am Ende (oder bei „Sofort einfügen“ pro Satz) – Vorschau-Schnipsel
+/// würden den Rechner unnötig auslasten.
+fn effective_mode(cfg: &Value, stt_provider: &str, command: bool) -> String {
+    let mode = cfg.s("/dictation/mode");
+    if command || (stt_provider == "local" && mode != "live") {
+        "batch".into()
+    } else {
+        mode
+    }
+}
+
 pub fn toggle_dictation(o: StartOpts) {
     if st().rec.lock().unwrap().recording {
         stop_dictation();
@@ -653,7 +664,7 @@ pub fn start_dictation(o: StartOpts) {
         "overlay",
         "rec:start",
         json!({
-            "id": id, "lang": lang, "mode": if o.command { "batch".to_string() } else { cfg.s("/dictation/mode") },
+            "id": id, "lang": lang, "mode": effective_mode(&cfg, &res.stt_provider, o.command),
             "position": cfg.s("/dictation/overlay"), "sounds": cfg.b("/dictation/sounds"), "hotkey": hotkey,
             "how": if o.how.is_empty() { "hotkey" } else { &o.how }, "command": if o.command { "pending" } else { "" },
         }),
@@ -771,11 +782,7 @@ pub fn start_dictation(o: StartOpts) {
         }
         overlay_event(json!({ "id": id, "type": "info", "app": app_name, "profile": profile }));
         let session_cfg = session::Cfg {
-            mode: if command {
-                "batch".into()
-            } else {
-                cfg.s("/dictation/mode")
-            },
+            mode: effective_mode(&cfg, &stt_provider, command),
             language: cfg.s("/dictation/language"),
             trailing_space: !command && cfg.b("/dictation/trailingSpace"),
             ai,
@@ -1376,6 +1383,11 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
         "perm:request" => {
             #[cfg(target_os = "macos")]
             {
+                // Nach einem Update hält macOS oft einen veralteten Eintrag fest („ist doch eingeschaltet?!“).
+                // Darum zuerst den alten Eintrag von SlimVoice zurücksetzen – dann fragt macOS frisch.
+                if !accessibility_ok() {
+                    let _ = std::process::Command::new("/usr/bin/tccutil").args(["reset", "Accessibility", "app.slimbit.slimvoice"]).status();
+                }
                 let _ =
                     macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
                 open_url(
@@ -1383,6 +1395,9 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
                 );
             }
             json!({ "accessibility": accessibility_ok() })
+        }
+        "app:restart" => {
+            s.handle.restart();
         }
         "perm:openMic" => {
             open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
@@ -1578,8 +1593,56 @@ fn apply_autostart() {
     let _ = if on { al.enable() } else { al.disable() };
 }
 
+// ------------------------------------------------------------------ Selbsttest ohne Oberfläche (CI)
+/// Lädt das Modell, erkennt die eingebaute Sprachprobe (mit und ohne Grafikbeschleunigung) und misst die Zeit.
+pub fn cli_selftest(model: &str) -> i32 {
+    let dir = std::env::temp_dir().join("slimvoice-selftest");
+    let eng = local::Engine::new(dir);
+    let key = local::model(model).key;
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime");
+    if !eng.is_downloaded(key) {
+        if let Err(e) = rt.block_on(eng.download(key, |_, _| {})) {
+            println!("{}", json!({ "ok": false, "step": "download", "error": e.to_string() }));
+            return 1;
+        }
+    }
+    let (samples, _) = wav::decode_wav(local::SELFTEST_WAV).unwrap_or_default();
+    let pcm: Vec<i16> = samples.iter().map(|v| (v * 32767.0) as i16).collect();
+    let mut results = Vec::new();
+    let mut ok = true;
+    for gpu in [true, false] {
+        let t0 = Instant::now();
+        let r = eng.transcribe(key, gpu, &pcm, "en", "", false);
+        // zweiter Lauf: so schnell ist es im Alltag (Modell schon geladen)
+        let t1 = Instant::now();
+        let r2 = eng.transcribe(key, gpu, &pcm, "en", "", false);
+        let text = r.as_ref().map(|t| t.text.clone()).unwrap_or_else(|e| e.to_string());
+        let good = local::SELFTEST_WORDS.iter().filter(|w| text.to_lowercase().contains(*w)).count() >= 2;
+        let warm_ms = t1.elapsed().as_millis();
+        ok &= good && r2.is_ok() && warm_ms < 15_000;
+        results.push(json!({ "gpu": gpu, "text": text, "first_ms": (t1 - t0).as_millis(), "warm_ms": warm_ms, "ok": good }));
+        eng.unload();
+    }
+    // Stille darf nichts erfinden und muss sofort fertig sein
+    let silence = vec![3i16; 16_000 * 3];
+    let st = eng.transcribe(key, false, &silence, "de", "", false).map(|t| t.text).unwrap_or_default();
+    ok &= st.is_empty();
+    println!("{}", json!({ "ok": ok, "model": key, "results": results, "silence": st }));
+    if ok {
+        0
+    } else {
+        1
+    }
+}
+
 // ------------------------------------------------------------------ Start
 pub fn run() {
+    // Abstürze ins Protokoll schreiben (statt einfach zu verschwinden)
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log(format!("PANIC: {info}"));
+        default_hook(info);
+    }));
     let mut builder = tauri::Builder::default();
     if !is_test() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {

@@ -28,6 +28,7 @@ const TEXT: Record<Lang, Record<string, string>> = {
     'err.no_key': 'Kein API-Schlüssel für {provider} eingetragen.',
     'err.local_missing': 'Das Sprachmodell ist noch nicht heruntergeladen.',
     'err.local': 'Die lokale Spracherkennung hatte ein Problem.',
+    'err.local_slow': 'Das dauert auf diesem Rechner zu lange – bitte unter „Spracherkennung“ ein kleineres Modell wählen.',
     'setup': 'Einrichten',
     'warn.ai_no_key': 'KI-Korrektur übersprungen – kein Dienst eingerichtet.',
     'err.auth': 'Der Dienst lehnt den API-Schlüssel ab.',
@@ -67,6 +68,7 @@ const TEXT: Record<Lang, Record<string, string>> = {
     'err.no_key': 'No API key set for {provider}.',
     'err.local_missing': 'The speech model has not been downloaded yet.',
     'err.local': 'Local speech recognition ran into a problem.',
+    'err.local_slow': 'This takes too long on this computer – please choose a smaller model under “Speech recognition”.',
     'setup': 'Set up',
     'warn.ai_no_key': 'AI correction skipped – no service set up.',
     'err.auth': 'The service rejected the API key.',
@@ -221,8 +223,8 @@ window.api.on('ui:event', (ev: any) => {
       if (sounds) beep('error');
       const key = TEXT.en['err.' + ev.code] ? 'err.' + ev.code : 'err.error';
       setState('error', t(key, { provider: PROVIDERS[ev.provider] || ev.provider || '' }));
-      btnSettings.textContent = ['no_key', 'local_missing', 'no_llm'].includes(ev.code) ? t('setup') : t('settings');
-      setNote(ev.message && !['no_key', 'local_missing', 'no_llm', 'mic'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
+      btnSettings.textContent = ['no_key', 'local_missing', 'no_llm', 'local_slow'].includes(ev.code) ? t('setup') : t('settings');
+      setNote(ev.message && !['no_key', 'local_missing', 'no_llm', 'mic', 'local_slow'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
       break;
     }
   }

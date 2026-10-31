@@ -1,0 +1,21 @@
+# Portabler Build von whisper.cpp: läuft auf allen Rechnern, nicht nur auf dem Build-Server.
+# (Standard wäre „optimiert für genau diesen Prozessor“ – das stürzt auf anderen Prozessoren ab.)
+# Wird über die Umgebungsvariable CMAKE_PROJECT_INCLUDE eingebunden (siehe .github/workflows/slimvoice.yml).
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(_sv_x86 OFF)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+  set(_sv_x86 ON)
+endif()
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+  if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+    set(_sv_x86 ON)
+  else()
+    set(_sv_x86 OFF)
+  endif()
+endif()
+if(_sv_x86)
+  # AVX2/FMA/F16C: alle Intel-/AMD-Prozessoren seit etwa 2013–2015
+  foreach(_f GGML_SSE42 GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C GGML_BMI2)
+    set(${_f} ON CACHE BOOL "" FORCE)
+  endforeach()
+endif()

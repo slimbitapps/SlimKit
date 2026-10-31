@@ -14,6 +14,10 @@ defaults:
   run:
     working-directory: slimvoice
 
+# whisper.cpp portabel bauen (läuft auf allen Rechnern, nicht nur auf dem Build-Server)
+env:
+  CMAKE_PROJECT_INCLUDE: ${{ github.workspace }}/slimvoice/src-tauri/cmake/ggml-portable.cmake
+
 jobs:
   # Tests + Ende-zu-Ende-Test der echten App (Linux) inkl. echter lokaler Erkennung mit Modell-Download
   test:
@@ -25,7 +29,7 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: slimvoice/src-tauri }
+        with: { workspaces: slimvoice/src-tauri, prefix-key: portable-v1 }
       - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libxdo-dev xvfb imagemagick
       - run: npm ci
       - run: npm run typecheck
@@ -33,8 +37,13 @@ jobs:
       - run: npm run build:web
       - run: cargo build --features tauri/custom-protocol
         working-directory: slimvoice/src-tauri
-      - name: Ende-zu-Ende-Test (mit echter lokaler Erkennung, Modell „Klein“)
-        env: { LOCAL_MODEL: base }
+      - name: Gesprochenen Testsatz erzeugen
+        run: |
+          sudo apt-get install -y espeak-ng ffmpeg
+          espeak-ng -v en-us -s 140 -w /tmp/speech.wav "Hello, this is a test of the dictation. Everything works fine."
+          ffmpeg -loglevel error -y -i /tmp/speech.wav -af "adelay=800,apad=pad_dur=3" -ar 48000 -ac 1 /tmp/mic.wav
+      - name: Ende-zu-Ende-Test (mit echter lokaler Erkennung, Modell „Mittel“)
+        env: { LOCAL_MODEL: small, SPEECH_WAV: /tmp/mic.wav }
         run: xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e/run.cjs "$RUNNER_TEMP/shots"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -48,10 +57,16 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: slimvoice/src-tauri }
+        with: { workspaces: slimvoice/src-tauri, prefix-key: portable-v1 }
       - run: npm ci
       - run: npm test
       - run: npx tauri build --bundles nsis
+      - name: Selbsttest der fertigen App (Modell laden, Sprachprobe erkennen, Zeit messen)
+        shell: pwsh
+        run: |
+          $p = Start-Process -Wait -PassThru -FilePath src-tauri/target/release/slimvoice.exe -ArgumentList '--selftest=small' -RedirectStandardOutput selftest.txt
+          Get-Content selftest.txt
+          if ($p.ExitCode -ne 0) { exit 1 }
       - name: Installer + portable ZIP
         shell: pwsh
         run: |
@@ -72,10 +87,12 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: slimvoice/src-tauri }
+        with: { workspaces: slimvoice/src-tauri, prefix-key: portable-v1 }
       - run: npm ci
       - run: npm test
       - run: npx tauri build --bundles dmg
+      - name: Selbsttest der fertigen App auf Apple-Chip (Metal + Prozessor, Zeit messen)
+        run: src-tauri/target/release/bundle/macos/SlimVoice.app/Contents/MacOS/SlimVoice --selftest=small
       - run: |
           mkdir -p out
           cp src-tauri/target/release/bundle/dmg/*.dmg out/SlimVoice-Mac.dmg
@@ -93,7 +110,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: x86_64-apple-darwin }
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: slimvoice/src-tauri, key: intel }
+        with: { workspaces: slimvoice/src-tauri, key: intel, prefix-key: portable-v1 }
       - run: npm ci
       - run: npx tauri build --bundles dmg --target x86_64-apple-darwin
       - run: |

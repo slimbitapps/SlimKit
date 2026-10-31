@@ -296,13 +296,12 @@ export function AccessPerm() {
         <ol className="guide-steps perm-steps">
           <li>{L('Es öffnet sich „Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen“.', '“System Settings → Privacy & Security → Accessibility” opens.')}</li>
           <li>{L('Schalte den Schalter bei „SlimVoice“ ein (ggf. mit Passwort/Touch ID bestätigen).', 'Turn on the switch next to “SlimVoice” (confirm with password/Touch ID if asked).')}</li>
-          <li>{L('Fertig – diese Anzeige wird von selbst grün, du musst nichts neu laden.', 'Done – this turns green by itself, no need to reload.')}</li>
+          <li>{L('Fertig – diese Anzeige wird von selbst grün. Einen alten Eintrag von früheren Versionen hat SlimVoice schon automatisch entfernt.', 'Done – this turns green by itself. An old entry from earlier versions was removed automatically.')}</li>
           <li>
-            <strong>{L('Steht SlimVoice schon in der Liste und ist eingeschaltet, aber hier bleibt es rot?', 'SlimVoice is already in the list and switched on, but this stays red?')}</strong>{' '}
-            {L(
-              'Das passiert nach einem Update der Testversion: SlimVoice in der Liste markieren, unten auf „–“ klicken, dann hier nochmal „Freigeben …“ und den neuen Eintrag einschalten.',
-              'This happens after updating the test version: select SlimVoice in the list, click “–” below, then click “Allow …” here again and switch on the new entry.',
-            )}
+            {L('Bleibt es rot, obwohl der Schalter an ist?', 'Still red although the switch is on?')}{' '}
+            <button className="btn small" onClick={() => window.api.call('app:restart')}>
+              {L('SlimVoice neu starten', 'Restart SlimVoice')}
+            </button>
           </li>
         </ol>
       )}
@@ -384,6 +383,9 @@ export function Dictation() {
             ['batch', t('dict.mode.batch'), t('dict.mode.batch.d')],
           ]}
         />
+        {s.services.stt.provider === 'local' && d.mode === 'preview' && (
+          <p className="hint">{L('Bei der Erkennung auf deinem Computer wird – damit er ruhig bleibt – erst am Ende in einem Durchgang umgewandelt (ohne Live-Vorschau).', 'With recognition on your computer, the text is converted once at the end – to keep it quiet (no live preview).')}</p>
+        )}
       </Section>
 
       <Section>

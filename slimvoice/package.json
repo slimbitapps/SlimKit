@@ -1,6 +1,6 @@
 {
   "name": "slimvoice",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Free dictation for Windows & Mac that actually works – speak, and clean text appears where your cursor is. Local & private or via online services.",
   "private": true,
   "author": "SlimBit Apps",

@@ -6,7 +6,7 @@
  * Wörter pro Programm, Verlauf. Macht Bildschirmfotos.
  *
  *   xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e/run.cjs [screenshot-ordner]
- *   LOCAL_MODEL=base → zusätzlich echte lokale Erkennung mit Download + eingebautem Selbsttest (braucht Internet)
+ *   LOCAL_MODEL=base SPEECH_WAV=… → zusätzlich echte lokale Erkennung: Download, Selbsttest, gesprochenes Diktat mit Zeitmessung
  */
 const path = require('node:path');
 const fs = require('node:fs');
@@ -134,7 +134,7 @@ function startServer() {
   );
   const env = { ...process.env, SLIMVOICE_TEST: '1', SLIMVOICE_USERDATA: userData, SLIMVOICE_OUTPUT: out, SLIMVOICE_FAKE_AUDIO: wav, SLIMVOICE_CONTROL_FILE: portFile, SLIMVOICE_FG_APP: 'OUTLOOK', SLIMVOICE_SELECTION: 'Hey Leute', LANG: 'de_DE.UTF-8' };
   const app = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let appLog = '';
+  let appLog = '';  // eslint-disable-line prefer-const
   app.stdout.on('data', (d) => (appLog += d));
   app.stderr.on('data', (d) => (appLog += d));
   const readOut = () => (fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '');
@@ -290,6 +290,49 @@ function startServer() {
       assert.equal(r.ok, true);
       assert.equal(r.test.ok, true, 'Selbsttest erkennt die Sprachprobe');
       console.log('✓ Lokale Erkennung: Download + eingebauter Selbsttest');
+    }
+
+    // ---------------------------------------------------------------- Echtes lokales Diktat mit gesprochener Sprache + Zeitmessung
+    if (process.env.LOCAL_MODEL && process.env.SPEECH_WAV) {
+      app.kill();
+      await sleep(1500);
+      fs.writeFileSync(out, '');
+      fs.rmSync(portFile, { force: true });
+      const cfg = JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8'));
+      cfg.onboarded = true;
+      cfg.dictation.mode = 'preview';
+      cfg.dictation.language = 'en';
+      cfg.ai.level = 'off';
+      cfg.ai.profiles = [];
+      cfg.services.stt.provider = 'local';
+      cfg.services.local.model = process.env.LOCAL_MODEL;
+      fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify(cfg));
+      appLog = '';
+      const app2 = spawn(BIN, [], { env: { ...env, SLIMVOICE_FAKE_AUDIO: process.env.SPEECH_WAV, LANG: 'en_US.UTF-8' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      app2.stdout.on('data', (d) => (appLog += d));
+      app2.stderr.on('data', (d) => (appLog += d));
+      try {
+        await waitFor(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').length > 0, 60000, 'App 2 startet');
+        base = `http://127.0.0.1:${fs.readFileSync(portFile, 'utf8')}`;
+        await waitFor(() => /setup: ready/.test(appLog), 60000, 'App 2 bereit');
+        for (const mode of ['preview', 'live']) {
+          fs.writeFileSync(out, '');
+          await dispatch('settings:set', { dictation: { mode } });
+          await ctl('/toggle');
+          await sleep(7000); // ein gesprochener Satz (~4 s) + Pausen
+          const t1 = Date.now();
+          await ctl('/toggle');
+          await waitFor(() => readOut().trim().length > 0, 60000, `lokales Diktat (${mode}) fertig`);
+          const secs = (Date.now() - t1) / 1000;
+          console.log(`  lokal (${mode}): „${readOut().trim()}“ – ${secs.toFixed(1)} s nach „Fertig“`);
+          assert.match(readOut(), /hello|test|dictation|works/i);
+          assert.ok(secs < 20, `lokales Diktat zu langsam: ${secs} s`);
+          await sleep(1500);
+        }
+        console.log('✓ Echtes lokales Diktat (Vorschau + Sofort), schnell genug');
+      } finally {
+        app2.kill();
+      }
     }
 
     console.log(`\nAlles grün. Screenshots: ${SHOTS}`);
