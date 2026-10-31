@@ -1,5 +1,5 @@
 # Baut SlimVoice (Ordner slimvoice/, Tauri) zum Testen: Installer für Windows und Mac.
-# Ergebnis: Vorabversion „SlimVoice (Test)“ unter Releases – wird bei jedem neuen Stand ersetzt.
+# Ergebnis: nicht öffentlich – nur angemeldet unter Actions → letzter Lauf → „Artifacts“ (SlimVoice-Windows, SlimVoice-Mac …).
 # Unsigniert: Windows zeigt einmal „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“,
 # Mac: Rechtsklick auf die App → „Öffnen“.
 name: SlimVoice bauen
@@ -101,37 +101,3 @@ jobs:
           cp src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg out/SlimVoice-Mac-Intel.dmg
       - uses: actions/upload-artifact@v4
         with: { name: SlimVoice-Mac-Intel, path: slimvoice/out/*, if-no-files-found: error }
-
-  release:
-    needs: [test, windows, mac]
-    if: always() && needs.windows.result == 'success' && needs.mac.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { path: out, merge-multiple: true, pattern: 'SlimVoice-[MW]*' }
-      - run: ls -la out
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: slimvoice-test
-          name: SlimVoice (Test)
-          target_commitish: ${{ github.sha }}
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: false
-          body: |
-            Testversion von SlimVoice – wird bei jedem neuen Stand ersetzt.
-            **Windows:** SlimVoice-Setup.exe herunterladen und doppelklicken. Warnung „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“.
-            **Mac mit Apple-Chip (M1–M4):** SlimVoice-Mac.dmg öffnen, App auf „Programme“ ziehen, dann Rechtsklick auf die App → „Öffnen“.
-            **Älterer Mac mit Intel:** SlimVoice-Mac-Intel.dmg (falls vorhanden)
-            **Ohne Installation (Windows):** SlimVoice-Windows-portable.zip entpacken und SlimVoice.exe starten.
-            Stand: ${{ github.sha }}
-          files: |
-            out/SlimVoice-Setup.exe
-            out/SlimVoice-Windows-portable.zip
-            out/SlimVoice-Mac.dmg
-            out/SlimVoice-Mac-Intel.dmg
