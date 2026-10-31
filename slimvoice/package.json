@@ -52,11 +52,11 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "SlimVoice-Windows-portable.${ext}"
     },
     "nsis": {
       "oneClick": true,

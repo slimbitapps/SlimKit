@@ -248,4 +248,4 @@ class Inserter {
   }
 }
 
-module.exports = { Inserter };
+module.exports = { Inserter, WinHelper };

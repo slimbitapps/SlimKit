@@ -1,0 +1,95 @@
+# Baut SlimVoice (Ordner slimvoice/) zum Testen: Installer für Windows und Mac.
+# Ergebnis: Vorabversion „SlimVoice (Test)“ unter Releases – wird bei jedem neuen Stand ersetzt.
+# Unsigniert: Windows zeigt einmal „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“,
+# Mac: Rechtsklick auf die App → „Öffnen“.
+name: SlimVoice bauen
+
+on:
+  push:
+    branches: [claude/stoic-ritchie-esp9l9]
+    paths: ['slimvoice/**', '.github/workflows/slimvoice.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: slimvoice
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node --test test/core.test.cjs test/platform.test.cjs
+      - run: npm run build
+      - name: Installer (Setup.exe) + portable ZIP
+        shell: bash
+        run: npx electron-builder --win nsis zip --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SlimVoice-Windows
+          path: |
+            slimvoice/release/*.exe
+            slimvoice/release/*.zip
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Unsigniert bauen (ad-hoc signiert, damit es auf Apple-Chips startet)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --mac dir --arm64 --x64 -c.mac.identity=null --publish never
+          codesign --force --deep --sign - release/mac-arm64/SlimVoice.app
+          codesign --force --deep --sign - release/mac/SlimVoice.app
+          npx electron-builder --mac dmg --arm64 -c.mac.identity=null --prepackaged release/mac-arm64/SlimVoice.app --publish never
+          npx electron-builder --mac dmg --x64 -c.mac.identity=null --prepackaged release/mac/SlimVoice.app --publish never
+          mv release/SlimVoice-Mac-arm64.dmg release/SlimVoice-Mac.dmg
+          mv release/SlimVoice-Mac-x64.dmg release/SlimVoice-Mac-Intel.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SlimVoice-Mac
+          path: slimvoice/release/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: slimvoice-test
+          name: SlimVoice (Test)
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          body: |
+            Testversion von SlimVoice – wird bei jedem neuen Stand ersetzt.
+            **Windows:** SlimVoice-Setup.exe herunterladen und doppelklicken. Warnung „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“.
+            **Mac mit Apple-Chip (M1–M4):** SlimVoice-Mac.dmg öffnen, App auf „Programme“ ziehen, dann Rechtsklick auf die App → „Öffnen“.
+            **Älterer Mac mit Intel:** SlimVoice-Mac-Intel.dmg
+            **Ohne Installation (Windows):** SlimVoice-Windows-portable.zip entpacken und SlimVoice.exe starten.
+            Stand: ${{ github.sha }}
+          files: |
+            out/SlimVoice-Setup.exe
+            out/SlimVoice-Windows-portable.zip
+            out/SlimVoice-Mac.dmg
+            out/SlimVoice-Mac-Intel.dmg
