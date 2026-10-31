@@ -9,6 +9,16 @@ landet dort, wo der Cursor steht, in **jeder** App. Die Anzeige nimmt nie den Fo
 
 ## Was es kann
 
+**Einrichtungs-Assistent** beim ersten Start: Du wählst, ob die Erkennung **auf deinem Computer** läuft
+(kostenlos, privat, offline, ohne Konto) oder **über einen Online-Dienst** (am schnellsten). Für jeden Dienst
+gibt es eine Schritt-für-Schritt-Anleitung, wie du an den API-Schlüssel kommst. Der Schlüssel wird beim Einfügen sofort geprüft.
+
+**Lokale Spracherkennung** (Whisper, direkt in der App), wird erst bei Bedarf heruntergeladen:
+- Klein (ca. 80 MB), Mittel (ca. 250 MB) oder Groß (ca. 900 MB).
+- SlimVoice empfiehlt eine passende Größe für deinen Rechner.
+- Rechnet auf der Grafikkarte, wenn möglich, sonst auf dem Prozessor mit mehreren Kernen.
+- Danach funktioniert alles ohne Internet.
+
 **Drei Modi** (auch über das Symbol umschaltbar)
 - **Sofort einfügen**: Nach jeder Sprechpause wird der Satz eingefügt. Am schnellsten.
 - **Live-Vorschau** (Standard): Du siehst mit, was erkannt wird. Am Ende wird alles in bester Qualität
@@ -42,7 +52,7 @@ Dazu:
 
 **App-Profile**: z. B. in Outlook förmlich, in Slack locker und nur Satzzeichen.
 
-**Dienste**: OpenAI, Groq, Google Gemini, Anthropic Claude (nur Korrektur) oder ein **eigener/lokaler Server**
+**Online-Dienste**: Groq (kostenlos testen), OpenAI, Google Gemini, Anthropic Claude (nur Korrektur) oder für Profis ein **eigener Server**
 (OpenAI-kompatibel, z. B. speaches/faster-whisper und Ollama). Damit geht es auch ganz ohne Cloud.
 - API-Schlüssel werden mit dem System verschlüsselt (Windows DPAPI, Mac-Schlüsselbund).
 - „Verbindung testen“ prüft Schlüssel, Adresse und Modell.
@@ -109,7 +119,8 @@ npm run dist:mac
   zum Starten, nochmal zum Beenden.
 - **Echtes Wort-für-Wort-Streaming** (Realtime-APIs per WebSocket) wäre der nächste Schritt für die Vorschau.
   Aktuell aktualisiert sie sich satzweise nach jeder Pause.
-- **Lokale Spracherkennung direkt eingebaut** (whisper.cpp), statt über einen separaten lokalen Server.
+- Lokale KI-Korrektur (kleines Sprachmodell auf dem Rechner). Bisher braucht die Korrektur einen Online-Dienst.
+  Ohne Dienst wird sie einfach übersprungen.
 - Code-Signatur: Mac (Developer ID + Notarisierung) und Windows (sonst SmartScreen-Warnung) vor der Veröffentlichung.
 - Die Modellnamen der Anbieter ändern sich häufig. Die Voreinstellungen in `electron/core/providers.cjs` vor dem
   Release prüfen; in der App sind sie jederzeit überschreibbar.

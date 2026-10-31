@@ -42,6 +42,7 @@ export interface Settings {
   services: {
     stt: { provider: string; model: string; fastModel: string; baseUrl: string };
     llm: { provider: string; model: string; baseUrl: string };
+    local: { model: LocalKey; device: 'auto' | 'gpu' | 'cpu'; ready: Partial<Record<LocalKey, boolean>> };
   };
   history: { keep: boolean; max: number };
   autostart: boolean;
@@ -55,7 +56,17 @@ export interface ProviderInfo {
   keyOptional: boolean;
   keyUrl: string;
 }
+export type LocalKey = 'base' | 'small' | 'turbo';
+export interface EngineStatus {
+  downloading: string;
+  progress: number;
+  loaded: number;
+  total: number;
+  device: string;
+  loadedModel: string;
+}
 export interface Snapshot {
+  local: { models: Record<LocalKey, { id: string; sizeMB: number; ramGB: number }>; status: EngineStatus; ramGB: number; cores: number };
   settings: Settings;
   secrets: { keys: Record<string, { set: boolean; hint: string }>; encrypted: boolean };
   platform: string;

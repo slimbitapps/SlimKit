@@ -4,7 +4,7 @@ const de = {
   'nav.welcome': 'Start',
   'nav.dictation': 'Diktat',
   'nav.ai': 'KI-Korrektur',
-  'nav.services': 'Dienste & Schlüssel',
+  'nav.services': 'Spracherkennung & KI',
   'nav.history': 'Verlauf',
   'nav.general': 'Allgemein',
 
@@ -103,7 +103,7 @@ const de = {
   'ai.profiles.d': 'Eigene Einstellungen je nach App, in der du diktierst. Der App-Name muss nur enthalten sein (z. B. „outlook“, „slack“, „code“).',
   'ai.profiles.app': 'App',
   'ai.inherit': 'Wie oben',
-  'ai.noLlm': 'Für die KI-Korrektur fehlt noch ein API-Schlüssel – siehe „Dienste & Schlüssel“.',
+  'ai.noLlm': 'Für die KI-Korrektur ist noch kein Online-Dienst eingerichtet – sie wird übersprungen. Hier klicken zum Einrichten (mit Anleitung).',
 
   'svc.stt': 'Spracherkennung',
   'svc.stt.d': 'Wandelt deine Sprache in Text um.',
@@ -128,7 +128,7 @@ const de = {
   'svc.ok': 'Funktioniert ({ms} ms)',
   'svc.fail': 'Fehler: {msg}',
   'svc.expert': 'Expertenoptionen',
-  'svc.costs': 'Kosten: Du zahlst direkt beim Dienst, ohne Abo bei uns. Spracherkennung kostet grob 0,3–0,6 Cent pro Minute, die KI-Korrektur meist unter 0,1 Cent pro Diktat (Stand: Herbst 2026, bitte beim Anbieter prüfen).',
+  'svc.costs': 'Online-Dienste: Du zahlst direkt beim Anbieter, ohne Abo bei uns – meist nur Cent-Beträge pro Stunde Diktat. Die lokale Erkennung ist komplett kostenlos.',
   'svc.local': 'Ganz ohne Cloud: Wähle „Eigener / lokaler Server“ und starte auf deinem Rechner einen OpenAI-kompatiblen Whisper-Server (z. B. „speaches“) und für die KI z. B. Ollama.',
   'err.no_key': 'kein API-Schlüssel',
   'err.auth': 'Schlüssel abgelehnt',
@@ -166,7 +166,7 @@ const en: Record<keyof typeof de, string> = {
   'nav.welcome': 'Start',
   'nav.dictation': 'Dictation',
   'nav.ai': 'AI correction',
-  'nav.services': 'Services & keys',
+  'nav.services': 'Recognition & AI',
   'nav.history': 'History',
   'nav.general': 'General',
 
@@ -265,7 +265,7 @@ const en: Record<keyof typeof de, string> = {
   'ai.profiles.d': 'Different settings depending on the app you dictate into. The app name only has to contain the text (e.g. “outlook”, “slack”, “code”).',
   'ai.profiles.app': 'App',
   'ai.inherit': 'As above',
-  'ai.noLlm': 'The AI correction still needs an API key – see “Services & keys”.',
+  'ai.noLlm': 'No online service is set up for the AI correction yet – it is skipped. Click here to set one up (with a guide).',
 
   'svc.stt': 'Speech recognition',
   'svc.stt.d': 'Turns your speech into text.',
@@ -290,7 +290,7 @@ const en: Record<keyof typeof de, string> = {
   'svc.ok': 'Works ({ms} ms)',
   'svc.fail': 'Error: {msg}',
   'svc.expert': 'Expert options',
-  'svc.costs': 'Costs: you pay the service directly, no subscription with us. Speech recognition costs roughly 0.3–0.6 cents per minute, the AI correction usually less than 0.1 cents per dictation (as of autumn 2026, please check with the provider).',
+  'svc.costs': 'Online services: you pay the provider directly, no subscription with us – usually cents per hour of dictation. Local recognition is completely free.',
   'svc.local': 'No cloud at all: choose “Custom / local server” and run an OpenAI-compatible Whisper server on your computer (e.g. “speaches”) and e.g. Ollama for the AI.',
   'err.no_key': 'no API key',
   'err.auth': 'key rejected',

@@ -1,91 +1,229 @@
 import { useEffect, useState } from 'react';
 import { Cards, Keys, Row, Section, Segmented, Select, TextField, Toggle, HotkeyInput, useApp } from './ui';
 import { LANGUAGES, type Key } from './i18n';
+import { LLM_PROVIDERS, GUIDES, LOCAL_TEXT } from './guides';
+import { LocalModels, ProviderPicker, ProviderSetup, SourceChoice, llmProvider, sttReady, useL } from './setup';
 import type { HistoryItem, Level, Mode, Profile, Tempo } from './types';
 
 // ------------------------------------------------------------------ Start
+/** Einrichtungs-Assistent beim ersten Start, danach Übersicht + Testfeld */
 export function Welcome() {
-  const { t, s, snap, set, nav, lang } = useApp();
-  const sttReady = snap.stt[s.services.stt.provider]?.keyOptional || !!snap.secrets.keys[s.services.stt.provider];
+  const { s } = useApp();
+  return s.onboarded ? <Overview /> : <Wizard />;
+}
+
+function TryIt() {
+  const { s, snap } = useApp();
+  const L = useL();
   const [text, setText] = useState('');
-  const [recording, setRecording] = useState(false);
+  const ready = sttReady(snap);
+  return (
+    <div className="try-box">
+      <p className="hint">
+        {L('Klicke in das Feld, drücke', 'Click into the field, press')} {s.hotkey.toggle ? <Keys accel={s.hotkey.toggle} /> : '—'}{' '}
+        {L('und sprich. Zum Beenden nochmal drücken – oder einfach mit der Maus:', 'and speak. Press again to finish – or use the mouse:')}
+      </p>
+      <textarea className="input try" rows={4} value={text} placeholder={L('Hier erscheint dein diktierter Text …', 'Your dictated text appears here …')} onChange={(e) => setText(e.target.value)} />
+      <div className="actions">
+        <button
+          className="btn primary"
+          disabled={!ready}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            (document.querySelector('.try') as HTMLTextAreaElement)?.focus();
+            window.api.call('dictation:toggle');
+          }}
+        >
+          🎤 {L('Diktat starten / beenden', 'Start / stop dictation')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Wizard() {
+  const { s, snap, set, lang } = useApp();
+  const L = useL();
+  const [step, setStep] = useState(0);
+  const local = s.services.stt.provider === 'local';
+  const ready = sttReady(snap);
+  const llm = llmProvider(snap);
   const mac = snap.platform === 'darwin';
-  const where = t(mac ? 'welcome.where.mac' : snap.platform === 'win32' ? 'welcome.where.win' : 'welcome.where.linux');
-  const keyText = s.hotkey.toggle ? <Keys accel={s.hotkey.toggle} /> : '—';
-  const lead = t('welcome.lead', { key: '\u0000' }).split('\u0000');
-  const tryText = t('welcome.try', { key: '\u0000' }).split('\u0000');
+  const [wantAi, setWantAi] = useState<boolean | null>(s.ai.level !== 'off' ? true : null);
+  const [aiProvider, setAiProvider] = useState(s.services.stt.provider !== 'local' && LLM_PROVIDERS.includes(s.services.stt.provider) ? s.services.stt.provider : 'groq');
+  const steps = [L('Willkommen', 'Welcome'), L('Spracherkennung', 'Speech recognition'), L('KI-Korrektur', 'AI correction'), L('Ausprobieren', 'Try it')];
+
+  const next = (
+    <div className="wizard-nav">
+      {step > 0 && (
+        <button className="btn" onClick={() => setStep(step - 1)}>
+          ← {L('Zurück', 'Back')}
+        </button>
+      )}
+      <span className="spacer" />
+      {step < 3 ? (
+        <button className="btn primary" disabled={step === 1 && !ready} onClick={() => setStep(step + 1)}>
+          {L('Weiter', 'Next')} →
+        </button>
+      ) : (
+        <button className="btn primary" onClick={() => set({ onboarded: true })}>
+          {L('Fertig', 'Done')} ✓
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="page">
-      <div className="hero">
-        <h1>{t('welcome.title')}</h1>
-        <p>
-          {lead[0]}
-          {keyText}
-          {lead[1]}
-        </p>
-      </div>
+    <div className="page wizard">
+      <ol className="wizard-steps" aria-label={L('Schritte', 'Steps')}>
+        {steps.map((name, i) => (
+          <li key={i} className={i === step ? 'on' : i < step ? 'done' : ''}>
+            <span>{i < step ? '✓' : i + 1}</span>
+            {name}
+          </li>
+        ))}
+      </ol>
 
-      {mac && (
-        <Section title={t('welcome.mac')}>
-          <Perm label={t('perm.mic')} ok={snap.permissions.mic === 'granted'} what="mic" />
-          <Perm label={t('perm.accessibility')} ok={snap.permissions.accessibility} what="accessibility" />
-        </Section>
+      {step === 0 && (
+        <>
+          <div className="hero">
+            <h1>{L('Diktieren, das wirklich funktioniert', 'Dictation that actually works')}</h1>
+            <p>
+              {L('Drücke', 'Press')} {s.hotkey.toggle && <Keys accel={s.hotkey.toggle} />}{' '}
+              {L(
+                'in irgendeiner App, sprich – und sauberer Text landet dort, wo dein Cursor steht. Du kannst währenddessen weitertippen. Die Einrichtung dauert zwei Minuten.',
+                'in any app, speak – and clean text appears where your cursor is. You can keep typing meanwhile. Setup takes two minutes.',
+              )}
+            </p>
+          </div>
+          <h2 className="step-title">{L('Wie soll deine Sprache erkannt werden?', 'How should your speech be recognised?')}</h2>
+          <SourceChoice />
+          <p className="hint">{L('Du kannst das später jederzeit ändern.', 'You can change this any time later.')}</p>
+        </>
       )}
 
-      <ol className="steps">
-        <li className={sttReady ? 'done' : ''}>
-          <span className="num">1</span>
-          <div className="step-body">
-            <strong>{sttReady ? t('welcome.step1.done') : t('welcome.step1')}</strong>
-            {!sttReady && (
-              <button className="btn primary" onClick={() => nav('services')}>
-                {t('welcome.setup')}
-              </button>
+      {step === 1 && (
+        <>
+          <h2 className="step-title">{local ? L('Sprachmodell herunterladen', 'Download a speech model') : L('Online-Dienst einrichten', 'Set up an online service')}</h2>
+          {local ? (
+            <LocalModels compact />
+          ) : (
+            <>
+              <ProviderPicker kind="stt" value={s.services.stt.provider} onChange={(provider) => set({ services: { stt: { provider, model: '', fastModel: '', baseUrl: '' } } })} />
+              <ProviderSetup kind="stt" provider={s.services.stt.provider} />
+            </>
+          )}
+          {!ready && <p className="hint">{local ? L('Sobald ein Modell heruntergeladen ist, geht es weiter.', 'Continue once a model is downloaded.') : L('Sobald der Schlüssel gespeichert ist, geht es weiter.', 'Continue once the key is saved.')}</p>}
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <h2 className="step-title">{L('Soll eine KI den Text zusätzlich glätten?', 'Should an AI polish the text as well?')}</h2>
+          <p className="hint">
+            {L(
+              'Die Spracherkennung setzt schon Satzzeichen. Die KI-Korrektur geht weiter: Sie korrigiert falsch verstandene Wörter aus dem Zusammenhang, repariert Sätze, die keinen Sinn ergeben, und kann auf Wunsch umformulieren. Dafür braucht sie einen Online-Dienst.',
+              'Speech recognition already adds punctuation. AI correction goes further: it fixes misheard words from the context, repairs sentences that make no sense and can rewrite on request. It needs an online service.',
             )}
+          </p>
+          <div className="choice-cards">
+            <button
+              type="button"
+              className={'choice' + (wantAi === false ? ' on' : '')}
+              onClick={() => {
+                setWantAi(false);
+                set({ ai: { level: 'off' } });
+              }}
+            >
+              <span className="dot" />
+              <strong>{L('Nein, erstmal nicht', 'No, not now')}</strong>
+              <span>{L('Text kommt so, wie er erkannt wurde. Später in den Einstellungen einschaltbar.', 'Text comes as recognised. Can be switched on later in settings.')}</span>
+            </button>
+            <button
+              type="button"
+              className={'choice' + (wantAi ? ' on' : '')}
+              onClick={() => {
+                setWantAi(true);
+                set({ ai: { level: s.ai.level === 'off' ? 'light' : s.ai.level } });
+              }}
+            >
+              <span className="dot" />
+              <strong>{L('Ja, Text glätten', 'Yes, polish the text')}</strong>
+              <span>{L('Empfohlen für E-Mails und längere Texte.', 'Recommended for emails and longer texts.')}</span>
+            </button>
           </div>
-        </li>
-        <li>
-          <span className="num">2</span>
-          <div className="step-body grow">
-            <strong>{t('welcome.step2')}</strong>
-            <p className="hint">
-              {tryText[0]}
-              {keyText}
-              {tryText[1]}
-              {keyText}
-              {tryText[2]}
-            </p>
-            <textarea className="input try" rows={5} value={text} placeholder={t('welcome.tryPlaceholder')} onChange={(e) => setText(e.target.value)} />
-            <div className="actions">
-              <button
-                className="btn"
-                disabled={!sttReady}
-                onMouseDown={(e) => e.preventDefault() /* Fokus bleibt im Textfeld */}
-                onClick={() => {
-                  (document.querySelector('.try') as HTMLTextAreaElement)?.focus();
-                  setRecording(!recording);
-                  window.api.call('dictation:toggle');
-                }}
-              >
-                {recording ? t('welcome.stop') : t('welcome.start')}
-              </button>
+          {wantAi && (llm ? (
+            <div className="banner ok">
+              ✓ {L('KI-Korrektur läuft über', 'AI correction uses')} {GUIDES[lang][llm]?.name || llm}. {L('Stufe „Leicht“ ist eingestellt.', 'Level “Light” is set.')}
             </div>
-          </div>
-        </li>
-        <li>
-          <span className="num">3</span>
-          <div className="step-body">
-            <strong>{t('welcome.step3', { where })}</strong>
-            {!s.onboarded && (
-              <button className="btn primary" onClick={() => set({ onboarded: true })}>
-                {t('welcome.done')}
-              </button>
-            )}
-          </div>
-        </li>
-      </ol>
-      <p className="hint center">{lang === 'de' ? 'Tipp: Modus, Tempo und KI-Stufe kannst du auch schnell über das Symbol umstellen.' : 'Tip: you can also switch mode, speed and AI level from the icon.'}</p>
+          ) : (
+            <>
+              <ProviderPicker kind="llm" value={aiProvider} onChange={setAiProvider} />
+              <ProviderSetup kind="llm" provider={aiProvider} />
+            </>
+          ))}
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <h2 className="step-title">{L('Ausprobieren', 'Try it')}</h2>
+          {mac && (
+            <Section title={L('Auf dem Mac braucht SlimVoice zwei Freigaben:', 'On the Mac, SlimVoice needs two permissions:')}>
+              <Perm label={L('Mikrofon', 'Microphone')} ok={snap.permissions.mic === 'granted'} what="mic" />
+              <Perm label={L('Bedienungshilfen (zum Einfügen)', 'Accessibility (to insert text)')} ok={snap.permissions.accessibility} what="accessibility" />
+            </Section>
+          )}
+          <TryIt />
+          <p className="hint">
+            {L('SlimVoice läuft danach im Hintergrund weiter –', 'SlimVoice then keeps running in the background –')}{' '}
+            {mac ? L('Symbol oben in der Menüleiste.', 'icon in the menu bar.') : L('Symbol unten rechts in der Taskleiste (ggf. unter dem Pfeil ^).', 'icon at the bottom right of the taskbar (maybe under the ^ arrow).')}
+          </p>
+        </>
+      )}
+      {next}
+    </div>
+  );
+}
+
+function Overview() {
+  const { s, snap, set, nav, lang } = useApp();
+  const L = useL();
+  const svc = s.services;
+  const ready = sttReady(snap);
+  const llm = llmProvider(snap);
+  const local = svc.stt.provider === 'local';
+  const sttName = local ? `${L('Auf diesem Computer', 'On this computer')} · ${LOCAL_TEXT[lang][svc.local.model]?.name}` : GUIDES[lang][svc.stt.provider]?.name || svc.stt.provider;
+  const levelName = { off: L('Aus', 'Off'), punct: L('Nur Satzzeichen', 'Punctuation only'), light: L('Leicht', 'Light'), strong: L('Stark', 'Strong') }[s.ai.level];
+  return (
+    <div className="page">
+      <div className="status-grid">
+        <button className="status-card" onClick={() => nav('services')}>
+          <span className={'dot-state ' + (ready ? 'ok' : 'bad')} />
+          <span className="label">{L('Spracherkennung', 'Speech recognition')}</span>
+          <strong>{sttName}</strong>
+          {!ready && <span className="hint error">{local ? L('Modell noch nicht heruntergeladen', 'Model not downloaded yet') : L('Schlüssel fehlt', 'Key missing')}</span>}
+        </button>
+        <button className="status-card" onClick={() => nav('ai')}>
+          <span className={'dot-state ' + (s.ai.level === 'off' ? 'off' : llm ? 'ok' : 'bad')} />
+          <span className="label">{L('KI-Korrektur', 'AI correction')}</span>
+          <strong>{s.ai.level === 'off' ? levelName : `${levelName} · ${GUIDES[lang][llm]?.name || '—'}`}</strong>
+          {s.ai.level !== 'off' && !llm && <span className="hint error">{L('Kein Dienst eingerichtet – wird übersprungen', 'No service set up – skipped')}</span>}
+        </button>
+        <button className="status-card" onClick={() => nav('dictation')}>
+          <span className="dot-state ok" />
+          <span className="label">{L('Tastenkürzel', 'Shortcut')}</span>
+          <strong>{s.hotkey.toggle ? <Keys accel={s.hotkey.toggle} /> : '—'}</strong>
+        </button>
+      </div>
+      <Section title={L('Ausprobieren', 'Try it')}>
+        <TryIt />
+      </Section>
+      <p className="hint center">
+        <button className="link" onClick={() => set({ onboarded: false })}>
+          {L('Einrichtungs-Assistent erneut starten', 'Run the setup assistant again')}
+        </button>
+      </p>
     </div>
   );
 }
@@ -228,8 +366,7 @@ export function Dictation() {
 export function Ai() {
   const { t, s, set, snap, nav, lang } = useApp();
   const a = s.ai;
-  const llmProvider = s.services.llm.provider === 'same' ? (snap.llm[s.services.stt.provider] ? s.services.stt.provider : 'openai') : s.services.llm.provider;
-  const llmReady = snap.llm[llmProvider]?.keyOptional || !!snap.secrets.keys[llmProvider];
+  const llmReady = !!llmProvider(snap);
   const langLabel = (l: [string, string, string]) => (lang === 'de' ? l[1] : l[2]);
   const styleOpts: [string, string][] = [
     ['neutral', t('ai.style.neutral')],
@@ -325,72 +462,107 @@ export function Ai() {
 
 // ------------------------------------------------------------------ Dienste
 export function Services() {
-  const { t, s, set, snap } = useApp();
+  const { t, s, set, snap, lang } = useApp();
+  const L = useL();
   const stt = s.services.stt;
   const llm = s.services.llm;
-  const sttInfo = snap.stt[stt.provider] || snap.stt.openai;
-  const llmProvider = llm.provider === 'same' ? (snap.llm[stt.provider] ? stt.provider : 'openai') : llm.provider;
-  const llmInfo = snap.llm[llmProvider];
+  const local = stt.provider === 'local';
+  const custom = stt.provider === 'custom';
   const tempo = s.dictation.tempo;
-  const [expert, setExpert] = useState(!!(stt.model || stt.fastModel || stt.baseUrl || llm.model || llm.baseUrl));
+  const [expert, setExpert] = useState(custom || !!(stt.model || stt.fastModel || stt.baseUrl || llm.model || llm.baseUrl || llm.provider === 'custom'));
+  const activeLlm = llmProvider(snap);
+  const llmChoice = llm.provider === 'same' ? 'auto' : llm.provider;
+  const sttInfo = snap.stt[stt.provider];
+  const llmInfoKey = llmChoice === 'auto' ? activeLlm : llmChoice;
+  const llmInfo = snap.llm[llmInfoKey];
 
   return (
     <div className="page">
-      <Section title={t('svc.stt')} desc={t('svc.stt.d')}>
-        <Row label={t('svc.provider')}>
-          <Select label={t('svc.provider')} value={stt.provider} onChange={(provider) => set({ services: { stt: { provider, model: '', fastModel: '', baseUrl: '' } } })} options={Object.entries(snap.stt).map(([k, v]) => [k, k === 'custom' ? t('svc.custom') : v.label])} />
-        </Row>
-        <KeyRow provider={stt.provider} info={sttInfo} />
-        {(stt.provider === 'custom' || expert) && (
-          <Row label={t('svc.baseUrl')}>
-            <TextField mono label={t('svc.baseUrl')} value={stt.baseUrl} placeholder={sttInfo.baseUrl} onCommit={(baseUrl) => set({ services: { stt: { baseUrl } } })} />
-          </Row>
-        )}
-        {expert && (
-          <>
-            <Row label={t('svc.model')} hint={t('svc.model.auto', { model: sttInfo.main[tempo] })}>
-              <TextField mono list="stt-models" label={t('svc.model')} value={stt.model} placeholder={sttInfo.main[tempo]} onCommit={(model) => set({ services: { stt: { model } } })} />
-            </Row>
-            <Row label={t('svc.previewModel')} hint={t('svc.model.auto', { model: sttInfo.preview || '' })}>
-              <TextField mono list="stt-models" label={t('svc.previewModel')} value={stt.fastModel} placeholder={sttInfo.preview} onCommit={(fastModel) => set({ services: { stt: { fastModel } } })} />
-            </Row>
-            <datalist id="stt-models">
-              {sttInfo.models.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </>
-        )}
-        <TestRow kind="stt" />
+      <Section title={L('Spracherkennung', 'Speech recognition')} desc={L('Wandelt deine Sprache in Text um.', 'Turns your speech into text.')}>
+        <div className="pad">
+          <SourceChoice />
+          {local && <LocalModels />}
+          {!local && !custom && (
+            <>
+              <ProviderPicker kind="stt" value={stt.provider} onChange={(provider) => set({ services: { stt: { provider, model: '', fastModel: '', baseUrl: '' } } })} />
+              <ProviderSetup kind="stt" provider={stt.provider} />
+            </>
+          )}
+          {custom && (
+            <>
+              <Row label={t('svc.baseUrl')} hint={L('OpenAI-kompatibler Server, z. B. speaches / faster-whisper-server.', 'OpenAI-compatible server, e.g. speaches / faster-whisper-server.')}>
+                <TextField mono label={t('svc.baseUrl')} value={stt.baseUrl} placeholder={sttInfo?.baseUrl} onCommit={(baseUrl) => set({ services: { stt: { baseUrl } } })} />
+              </Row>
+              <KeyRow provider="custom" info={{ keyOptional: true, keyUrl: '', label: t('svc.custom') }} />
+              <TestRow kind="stt" />
+            </>
+          )}
+          {expert && !local && sttInfo && (
+            <>
+              <Row label={t('svc.model')} hint={t('svc.model.auto', { model: sttInfo.main[tempo] })}>
+                <TextField mono list="stt-models" label={t('svc.model')} value={stt.model} placeholder={sttInfo.main[tempo]} onCommit={(model) => set({ services: { stt: { model } } })} />
+              </Row>
+              <Row label={t('svc.previewModel')} hint={t('svc.model.auto', { model: sttInfo.preview || '' })}>
+                <TextField mono list="stt-models" label={t('svc.previewModel')} value={stt.fastModel} placeholder={sttInfo.preview} onCommit={(fastModel) => set({ services: { stt: { fastModel } } })} />
+              </Row>
+              <datalist id="stt-models">
+                {sttInfo.models.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            </>
+          )}
+          {expert && (
+            <Toggle
+              label={L('Eigenen / lokalen Server verwenden (für Profis)', 'Use your own / local server (advanced)')}
+              value={custom}
+              onChange={(on) => set({ services: { stt: { provider: on ? 'custom' : 'local', model: '', fastModel: '', baseUrl: '' } } })}
+            />
+          )}
+        </div>
       </Section>
 
-      <Section title={t('svc.llm')} desc={t('svc.llm.d')}>
-        <Row label={t('svc.provider')}>
-          <Select label={t('svc.provider')} value={llm.provider} onChange={(provider) => set({ services: { llm: { provider, model: '', baseUrl: '' } } })} options={[['same', t('svc.same')], ...Object.entries(snap.llm).map(([k, v]) => [k, k === 'custom' ? t('svc.custom') : v.label] as [string, string])]} />
-        </Row>
-        {llmInfo && llmProvider !== stt.provider && <KeyRow provider={llmProvider} info={llmInfo} />}
-        {llmInfo && (llmProvider === 'custom' || expert) && (
-          <Row label={t('svc.baseUrl')}>
-            <TextField mono label={t('svc.baseUrl')} value={llm.baseUrl} placeholder={llmInfo.baseUrl} onCommit={(baseUrl) => set({ services: { llm: { baseUrl } } })} />
-          </Row>
-        )}
-        {llmInfo && expert && (
-          <Row label={t('svc.model')} hint={t('svc.model.auto', { model: llmInfo.main[tempo] })}>
-            <TextField mono list="llm-models" label={t('svc.model')} value={llm.model} placeholder={llmInfo.main[tempo]} onCommit={(model) => set({ services: { llm: { model } } })} />
-            <datalist id="llm-models">
-              {llmInfo.models.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </Row>
-        )}
-        <TestRow kind="llm" />
+      <Section
+        title={L('KI-Korrektur', 'AI correction')}
+        desc={L('Glättet den Text (Stufe unter „KI-Korrektur“). Optional – ohne Dienst wird sie einfach übersprungen.', 'Polishes the text (level under “AI correction”). Optional – skipped without a service.')}
+      >
+        <div className="pad">
+          <ProviderPicker kind="llm" allowAuto value={llmChoice === 'custom' ? '' : llmChoice} onChange={(provider) => set({ services: { llm: { provider, model: '', baseUrl: '' } } })} />
+          {llmChoice === 'auto' ? (
+            <p className="hint">
+              {activeLlm
+                ? `${L('Aktuell', 'Currently')}: ${GUIDES[lang][activeLlm]?.name || activeLlm}`
+                : L('Noch kein Dienst mit Schlüssel – wähle oben einen Dienst aus, um ihn einzurichten.', 'No service with a key yet – pick one above to set it up.')}
+            </p>
+          ) : llmChoice !== 'custom' ? (
+            <ProviderSetup kind="llm" provider={llmChoice} />
+          ) : null}
+          {expert && llmInfo && (
+            <Row label={t('svc.model')} hint={t('svc.model.auto', { model: llmInfo.main[tempo] })}>
+              <TextField mono list="llm-models" label={t('svc.model')} value={llm.model} placeholder={llmInfo.main[tempo]} onCommit={(model) => set({ services: { llm: { model } } })} />
+              <datalist id="llm-models">
+                {llmInfo.models.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            </Row>
+          )}
+          {expert && (
+            <Toggle label={L('Eigenen / lokalen KI-Server verwenden (z. B. Ollama)', 'Use your own / local AI server (e.g. Ollama)')} value={llmChoice === 'custom'} onChange={(on) => set({ services: { llm: { provider: on ? 'custom' : 'auto', model: '', baseUrl: '' } } })} />
+          )}
+          {expert && llmChoice === 'custom' && (
+            <>
+              <Row label={t('svc.baseUrl')}>
+                <TextField mono label={t('svc.baseUrl')} value={llm.baseUrl} placeholder={snap.llm.custom.baseUrl} onCommit={(baseUrl) => set({ services: { llm: { baseUrl } } })} />
+              </Row>
+              <TestRow kind="llm" />
+            </>
+          )}
+        </div>
       </Section>
 
       <Toggle label={t('svc.expert')} value={expert} onChange={setExpert} />
-      {!snap.secrets.encrypted && Object.keys(snap.secrets.keys).length > 0 && <p className="hint">{t('svc.key.plain')}</p>}
       <p className="hint">{t('svc.costs')}</p>
-      <p className="hint">{t('svc.local')}</p>
     </div>
   );
 }

@@ -34,7 +34,7 @@ const DEFAULTS = {
   },
   ai: {
     /** off | punct | light | strong */
-    level: 'light',
+    level: 'off',
     style: 'neutral',
     removeFillers: true,
     voiceCommands: true,
@@ -46,8 +46,10 @@ const DEFAULTS = {
     useContext: true,
   },
   services: {
-    stt: { provider: 'openai', model: '', fastModel: '', baseUrl: '' },
-    llm: { provider: 'same', model: '', baseUrl: '' },
+    stt: { provider: 'local', model: '', fastModel: '', baseUrl: '' },
+    llm: { provider: 'auto', model: '', baseUrl: '' },
+    /** Lokale Spracherkennung: base | small | turbo · Gerät: auto | gpu | cpu · ready: fertig geladene Modelle */
+    local: { model: 'small', device: 'auto', ready: {} },
   },
   history: { keep: true, max: 200 },
   autostart: false,

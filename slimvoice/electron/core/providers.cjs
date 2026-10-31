@@ -9,7 +9,23 @@ const Anthropic = require('@anthropic-ai/sdk');
  * Modelle je Dienst und Tempo. preview = für die Live-Vorschau, main = für den eingefügten Text.
  * Alle Namen lassen sich in den Einstellungen überschreiben.
  */
+/** Lokale Modelle (Whisper, laufen in der App). Größen: ungefähr, je nach Grafikkarte/Prozessor. */
+const LOCAL_MODELS = {
+  base: { id: 'onnx-community/whisper-base', sizeMB: 80, ramGB: 2 },
+  small: { id: 'onnx-community/whisper-small', sizeMB: 250, ramGB: 4 },
+  turbo: { id: 'onnx-community/whisper-large-v3-turbo', sizeMB: 900, ramGB: 8 },
+};
+
 const STT = {
+  local: {
+    label: 'On this computer',
+    preview: '',
+    main: { fast: '', balanced: '', best: '' },
+    models: [],
+    maxSeconds: 1800,
+    keyOptional: true,
+    local: true,
+  },
   openai: {
     label: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
@@ -255,23 +271,35 @@ async function completeAnthropic(o, base, timeout) {
     .trim();
 }
 
-/** Welche Modelle gelten gerade (eigene Angabe vor Voreinstellung) */
-function resolveModels(services, tempo) {
-  const stt = STT[services.stt.provider] || STT.openai;
-  const llmProvider = resolveLlmProvider(services);
+/**
+ * Welche Modelle gelten gerade (eigene Angabe vor Voreinstellung).
+ * hasKey(provider) → ob ein Schlüssel hinterlegt ist (für die automatische Wahl der KI-Korrektur).
+ */
+function resolveModels(services, tempo, hasKey = () => true) {
+  const sttProvider = STT[services.stt.provider] ? services.stt.provider : 'local';
+  const stt = STT[sttProvider];
+  const llmProvider = resolveLlmProvider(services, hasKey);
   const llm = LLM[llmProvider];
+  if (stt.local) {
+    const id = (LOCAL_MODELS[services.local?.model] || LOCAL_MODELS.small).id;
+    // lokal: Vorschau und Endergebnis mit demselben Modell → Vorschau wird wiederverwendet, keine doppelte Rechenzeit
+    return { sttProvider, sttMain: id, sttPreview: id, sttMaxSeconds: stt.maxSeconds, llmProvider, llmModel: llm ? services.llm.model || llm.main[tempo] : '' };
+  }
   return {
-    sttProvider: services.stt.provider,
+    sttProvider,
     sttMain: services.stt.model || stt.main[tempo] || stt.main.balanced,
     sttPreview: services.stt.fastModel || stt.preview,
     sttMaxSeconds: stt.maxSeconds,
     llmProvider,
-    llmModel: services.llm.model || llm?.main[tempo] || '',
+    llmModel: llm ? services.llm.model || llm.main[tempo] || '' : '',
   };
 }
-function resolveLlmProvider(services) {
-  if (services.llm.provider && services.llm.provider !== 'same') return services.llm.provider;
-  return LLM[services.stt.provider] ? services.stt.provider : 'openai';
+/** „auto“: derselbe Dienst wie die Spracherkennung, sonst der erste mit Schlüssel */
+function resolveLlmProvider(services, hasKey = () => true) {
+  const p = services.llm.provider;
+  if (p && p !== 'same' && p !== 'auto') return p;
+  if (LLM[services.stt.provider] && !STT[services.stt.provider]?.local && hasKey(services.stt.provider)) return services.stt.provider;
+  return ['groq', 'openai', 'gemini', 'anthropic'].find((k) => hasKey(k)) || '';
 }
 
-module.exports = { STT, LLM, ServiceError, transcribe, complete, resolveModels, resolveLlmProvider };
+module.exports = { STT, LLM, LOCAL_MODELS, ServiceError, transcribe, complete, resolveModels, resolveLlmProvider };

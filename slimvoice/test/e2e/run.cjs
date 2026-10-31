@@ -114,7 +114,7 @@ function startServer() {
       ui: { lang: 'de', theme: 'dark' },
       dictation: { mode: 'preview', tempo: 'balanced', sounds: false, language: 'de' },
       ai: { level: 'light', vocabulary: ['SlimBit'] },
-      services: { stt: { provider: 'custom', baseUrl: url, model: 'big-whisper', fastModel: 'small-whisper' }, llm: { provider: 'same', baseUrl: url, model: 'local-llm' } },
+      services: { stt: { provider: 'custom', baseUrl: url, model: 'big-whisper', fastModel: 'small-whisper' }, llm: { provider: 'custom', baseUrl: url, model: 'local-llm' } },
     }),
   );
 
@@ -137,6 +137,35 @@ function startServer() {
   const readOut = () => (fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '');
 
   try {
+    // ---------------------------------------------------------------- Einrichtungs-Assistent (Screenshots)
+    await sv(({}) => globalThis.__slimvoice.settings.update({ onboarded: false }), {});
+    await settingsWin.reload();
+    await settingsWin.setViewportSize({ width: 940, height: 760 });
+    await settingsWin.waitForSelector('.wizard');
+    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-1.png') });
+    // lokal → Modelle
+    await settingsWin.getByRole('radio', { name: /Auf diesem Computer/ }).click();
+    await settingsWin.getByRole('button', { name: /Weiter/ }).click();
+    await settingsWin.waitForSelector('.model-cards');
+    await waitFor(async () => !(await settingsWin.locator('.machine').innerText()).includes('…'), 15000, 'Engine antwortet (GPU-Info)');
+    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-2-lokal.png') });
+    const engineWin = app.windows().find((w) => w.url().includes('engine.html'));
+    assert.ok(engineWin, 'Engine-Fenster läuft');
+    assert.match(engineWin.url(), /^slimvoice:\/\/app\//);
+    assert.equal(await engineWin.evaluate(() => self.crossOriginIsolated), true, 'mehrere Kerne möglich (cross-origin isolated)');
+    // online → Groq-Anleitung
+    await settingsWin.getByRole('button', { name: /Zurück/ }).click();
+    await settingsWin.getByRole('radio', { name: /Online-Dienst/ }).click();
+    await settingsWin.getByRole('button', { name: /Weiter/ }).click();
+    await settingsWin.waitForSelector('.guide-steps');
+    assert.match(await settingsWin.locator('.guide').innerText(), /Create API Key/);
+    assert.equal(await settingsWin.getByRole('button', { name: /Weiter/ }).isDisabled(), true, 'ohne Schlüssel nicht weiter');
+    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-3-groq.png') });
+    // zurück auf den Test-Server stellen
+    await sv((_e, { url }) => globalThis.__slimvoice.settings.update({ onboarded: true, services: { stt: { provider: 'custom', baseUrl: url, model: 'big-whisper', fastModel: 'small-whisper' } } }), { url });
+    await settingsWin.reload();
+    console.log('✓ Einrichtungs-Assistent (lokal + Online mit Anleitung), Engine-Fenster isoliert');
+
     // ---------------------------------------------------------------- Einstellungen: Seiten durchklicken
     await settingsWin.setViewportSize({ width: 940, height: 680 });
     await settingsWin.waitForSelector('.nav-item');

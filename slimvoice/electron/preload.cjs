@@ -6,6 +6,7 @@ const CHANNELS = [
   'dictation:toggle', 'dictation:cancel', 'history:list', 'history:remove', 'history:clear',
   'clipboard:write', 'perm:request', 'shell:openExternal', 'app:log',
   'overlay:action', 'rec:segment', 'rec:stopped', 'rec:error',
+  'local:status', 'local:download', 'local:cancel', 'local:delete', 'engine:reply', 'engine:event',
 ];
 
 contextBridge.exposeInMainWorld('api', {

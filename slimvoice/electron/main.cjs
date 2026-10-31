@@ -5,7 +5,7 @@
  * ein kleines schwebendes Fenster (nimmt nie den Fokus!) nimmt auf und zeigt den Stand. Der Text landet
  * dort, wo der Cursor steht – man kann währenddessen ganz normal weitertippen.
  */
-const { app, BrowserWindow, ipcMain, shell, nativeTheme, nativeImage, screen, clipboard, Menu, Tray, globalShortcut, safeStorage, systemPreferences, session: electronSession } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, nativeTheme, nativeImage, screen, clipboard, Menu, Tray, globalShortcut, safeStorage, systemPreferences, protocol, net, session: electronSession } = require('electron');
 
 const isTest = !!process.env.SLIMVOICE_TEST;
 if (process.env.SLIMVOICE_USERDATA) app.setPath('userData', process.env.SLIMVOICE_USERDATA);
@@ -14,6 +14,8 @@ if (process.env.SLIMVOICE_FAKE_AUDIO) {
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.SLIMVOICE_FAKE_AUDIO);
 }
+// Eigenes Schema für die lokale Spracherkennung: mit „cross-origin isolation“ darf WebAssembly mehrere Prozessorkerne nutzen
+protocol.registerSchemesAsPrivileged([{ scheme: 'slimvoice', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true } }]);
 if (!isTest && !app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
@@ -28,6 +30,9 @@ const { DictationSession } = require('./core/session.cjs');
 const providers = require('./core/providers.cjs');
 const { encodeWav } = require('./core/wav.cjs');
 const { makeT, prettyAccel } = require('./core/strings.cjs');
+const { LocalEngine } = require('./core/local-engine.cjs');
+const os = require('node:os');
+const { pathToFileURL } = require('node:url');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 const isMac = process.platform === 'darwin';
@@ -80,13 +85,18 @@ function overlayEvent(ev) {
 function keyFor(provider) {
   return secrets.get(provider);
 }
-function missingKey() {
-  const s = settings.data.services;
-  const m = providers.resolveModels(s, settings.data.dictation.tempo);
-  if (!providers.STT[m.sttProvider]?.keyOptional && !keyFor(m.sttProvider)) return m.sttProvider;
-  if (settings.data.ai.level !== 'off' && !providers.LLM[m.llmProvider]?.keyOptional && !keyFor(m.llmProvider)) return m.llmProvider;
-  return '';
+const hasKey = (p) => !!providers.LLM[p]?.keyOptional || !!keyFor(p);
+function resolveModels(cfg) {
+  return providers.resolveModels(cfg.services, cfg.dictation.tempo, hasKey);
 }
+/** Kann die Spracherkennung loslegen? Sonst Fehlercode für die Anzeige */
+function sttProblem(cfg, m) {
+  if (m.sttProvider === 'local') return localReady(cfg) ? null : { code: 'local_missing' };
+  if (!providers.STT[m.sttProvider]?.keyOptional && !keyFor(m.sttProvider)) return { code: 'no_key', provider: m.sttProvider };
+  return null;
+}
+const localKey = (cfg) => (providers.LOCAL_MODELS[cfg.services.local.model] ? cfg.services.local.model : 'small');
+const localReady = (cfg) => !!cfg.services.local.ready?.[localKey(cfg)];
 
 function withTimeout(promise, ms, fallback) {
   return Promise.race([promise, new Promise((r) => setTimeout(() => r(fallback), ms))]);
@@ -101,19 +111,24 @@ async function startDictation() {
   updateTray();
   showOverlay();
 
-  const missing = missingKey();
-  if (missing) {
+  const models = resolveModels(cfg);
+  const problem = sttProblem(cfg, models);
+  if (problem) {
     rec.state = 'idle';
     updateTray();
-    overlayEvent({ id, type: 'error', code: 'no_key', provider: missing });
+    overlayEvent({ id, type: 'error', ...problem });
     return;
+  }
+  // KI-Korrektur gewünscht, aber kein Dienst mit Schlüssel → ohne KI weitermachen statt abzubrechen
+  if (cfg.ai.level !== 'off' && (!models.llmModel || !hasKey(models.llmProvider))) {
+    models.llmModel = '';
+    overlayEvent({ id, type: 'warning', code: 'ai_no_key' });
   }
   if (isMac && !isTest && cfg.dictation.insert !== 'copy' && !systemPreferences.isTrustedAccessibilityClient(false)) {
     overlayEvent({ id, type: 'warning', code: 'mac_accessibility' });
   }
 
   const appName = await withTimeout(inserter.foregroundApp(), 400, '');
-  const models = providers.resolveModels(cfg.services, cfg.dictation.tempo);
   const insertMethod =
     isMac && !isTest && cfg.dictation.insert !== 'copy' && !systemPreferences.isTrustedAccessibilityClient(false) ? 'copy' : cfg.dictation.insert;
   const sess = new DictationSession({
@@ -123,7 +138,9 @@ async function startDictation() {
     appName,
     deps: {
       transcribe: (o) =>
-        providers.transcribe({ ...o, provider: models.sttProvider, apiKey: keyFor(models.sttProvider), baseUrl: cfg.services.stt.baseUrl }),
+        models.sttProvider === 'local'
+          ? localTranscribe(o, cfg)
+          : providers.transcribe({ ...o, provider: models.sttProvider, apiKey: keyFor(models.sttProvider), baseUrl: cfg.services.stt.baseUrl }),
       complete: (o) =>
         providers.complete({
           ...o,
@@ -228,6 +245,72 @@ async function finishSession(id) {
   } finally {
     running.delete(sess);
   }
+}
+
+// ------------------------------------------------------------------ Lokale Spracherkennung
+const engine = new LocalEngine({
+  log,
+  create: () => {
+    const w = new BrowserWindow({
+      show: false,
+      width: 200,
+      height: 100,
+      skipTaskbar: true,
+      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
+    });
+    w.webContents.on('will-navigate', (e) => e.preventDefault());
+    w.webContents.on('render-process-gone', (_e, d) => log('engine gone', d));
+    if (isDev) w.loadURL(new URL('engine.html', process.env.VITE_DEV_SERVER_URL).toString());
+    else w.loadURL('slimvoice://app/engine.html');
+    return w;
+  },
+  onEvent: (ev) => {
+    if (ev.type === 'error') log('engine', ev.message);
+    sendSettings('local:event', { ...ev, status: engine.status });
+  },
+});
+
+async function localTranscribe(o, cfg) {
+  const pcm = o.wav.subarray(44);
+  const ab = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+  const res = await engine.send('transcribe', {
+    model: providers.LOCAL_MODELS[localKey(cfg)].id,
+    device: cfg.services.local.device,
+    language: o.language,
+    pcm: ab,
+  });
+  if (!res.ok) throw Object.assign(new Error(res.message), { code: 'local' });
+  return res.text;
+}
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+function registerAppProtocol() {
+  protocol.handle('slimvoice', async (req) => {
+    const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '');
+    const file = path.normalize(path.join(DIST, rel));
+    if (!file.startsWith(DIST)) return new Response('', { status: 403 });
+    const res = await net.fetch(pathToFileURL(file).toString());
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        'content-type': MIME[path.extname(file)] || 'application/octet-stream',
+        'cross-origin-opener-policy': 'same-origin',
+        'cross-origin-embedder-policy': 'credentialless',
+        'cross-origin-resource-policy': 'same-origin',
+      },
+    });
+  });
+}
+
+/** Modell herunterladen und laden; settings.services.local.ready merkt sich fertige Modelle */
+async function localDownload(key) {
+  const m = providers.LOCAL_MODELS[key];
+  if (!m) throw new Error('unknown model');
+  settings.update({ services: { local: { model: key } } });
+  const res = await engine.send('load', { model: m.id, device: settings.data.services.local.device });
+  if (res.ok) settings.update({ services: { local: { ready: { [key]: true } } } });
+  sendSettings('settings:changed');
+  return res;
 }
 
 // ------------------------------------------------------------------ Overlay
@@ -429,6 +512,7 @@ function snapshot() {
     stt: Object.fromEntries(Object.entries(providers.STT).map(([k, v]) => [k, { label: v.label, models: v.models, preview: v.preview, main: v.main, baseUrl: v.baseUrl, keyOptional: !!v.keyOptional, keyUrl: v.keyUrl || '' }])),
     llm: Object.fromEntries(Object.entries(providers.LLM).map(([k, v]) => [k, { label: v.label, models: v.models, main: v.main, baseUrl: v.baseUrl, keyOptional: !!v.keyOptional, keyUrl: v.keyUrl || '' }])),
     hotkeys: hotkeyStatus,
+    local: { models: providers.LOCAL_MODELS, status: engine.status, ramGB: Math.round(os.totalmem() / 1024 ** 3), cores: os.cpus().length },
     permissions: permissions(),
     dark: nativeTheme.shouldUseDarkColors,
   };
@@ -466,16 +550,23 @@ const handlers = {
       return false;
     }
   },
-  'service:test': async (kind) => {
-    const cfg = settings.data;
-    const m = providers.resolveModels(cfg.services, cfg.dictation.tempo);
+  /** provider: optional einen bestimmten Dienst prüfen (z. B. direkt nach dem Einfügen des Schlüssels) */
+  'service:test': async (kind, provider) => {
+    const cfg = structuredClone(settings.data);
+    if (provider && kind === 'stt') Object.assign(cfg.services.stt, { provider, model: provider === cfg.services.stt.provider ? cfg.services.stt.model : '' });
+    if (provider && kind === 'llm') Object.assign(cfg.services.llm, { provider, model: provider === cfg.services.llm.provider ? cfg.services.llm.model : '' });
+    const m = resolveModels(cfg);
     const t0 = Date.now();
     try {
-      if (kind === 'stt') {
+      if (kind === 'stt' && m.sttProvider === 'local') {
+        if (!localReady(cfg)) throw Object.assign(new Error('not downloaded'), { code: 'local_missing' });
+        await localTranscribe({ wav: encodeWav(new Int16Array(16000)), language: cfg.dictation.language }, cfg);
+      } else if (kind === 'stt') {
         // 0,6 s leises Rauschen – es geht nur darum, ob Schlüssel, Adresse und Modell stimmen
         const pcm = new Int16Array(9600).map(() => Math.round((Math.random() - 0.5) * 60));
         await providers.transcribe({ provider: m.sttProvider, apiKey: keyFor(m.sttProvider), baseUrl: cfg.services.stt.baseUrl, model: m.sttMain, language: cfg.dictation.language, wav: encodeWav(pcm) });
       } else {
+        if (!m.llmProvider) throw Object.assign(new Error('no provider'), { code: 'no_key' });
         const out = await providers.complete({
           provider: m.llmProvider,
           apiKey: keyFor(m.llmProvider),
@@ -492,6 +583,24 @@ const handlers = {
       return { ok: false, code: e.code || 'error', message: String(e.message || e).slice(0, 300) };
     }
   },
+  'local:status': async () => {
+    const res = await engine.send('status');
+    return { ...res, status: engine.status };
+  },
+  'local:download': (key) => localDownload(key),
+  'local:cancel': () => {
+    engine.dispose();
+    engine.status.downloading = '';
+    sendSettings('local:event', { type: 'cancelled', status: engine.status });
+  },
+  'local:delete': async (key) => {
+    const m = providers.LOCAL_MODELS[key];
+    const res = await engine.send('delete', { model: m.id });
+    settings.update({ services: { local: { ready: { [key]: false } } } });
+    return res;
+  },
+  'engine:reply': (id, result) => engine.reply(id, result),
+  'engine:event': (ev) => engine.event(ev),
   'dictation:toggle': () => toggleDictation(),
   'dictation:cancel': () => cancelDictation(),
   'history:list': () => history.items,
@@ -556,6 +665,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   inserter.dispose();
+  engine.dispose();
 });
 app.on('activate', () => showSettings());
 
@@ -566,8 +676,14 @@ app.whenReady().then(async () => {
   electronSession.defaultSession.setPermissionCheckHandler((wc, perm) => perm === 'media' && isOwnPage(wc?.getURL() || ''));
   nativeTheme.on('updated', () => sendSettings('theme:changed', nativeTheme.shouldUseDarkColors));
 
+  registerAppProtocol();
   hotkeyStatus = registerHotkeys();
   createOverlay();
+  // Lokales Modell schon mal in den Speicher laden, damit das erste Diktat nicht warten muss
+  const cfg0 = settings.data;
+  if (cfg0.services.stt.provider === 'local' && localReady(cfg0)) {
+    setTimeout(() => engine.send('load', { model: providers.LOCAL_MODELS[localKey(cfg0)].id, device: cfg0.services.local.device }).catch(() => {}), 2500);
+  }
   updateTray();
   inserter.warmup();
   applyAutostart();
@@ -580,11 +696,11 @@ app.whenReady().then(async () => {
 });
 
 function isOwnPage(url) {
-  return url.startsWith('file://') || (isDev && url.startsWith(process.env.VITE_DEV_SERVER_URL));
+  return url.startsWith('file://') || url.startsWith('slimvoice://') || (isDev && url.startsWith(process.env.VITE_DEV_SERVER_URL));
 }
 
 // Für den Ende-zu-Ende-Test
 if (isTest) {
-  globalThis.__slimvoice = { toggleDictation, stopDictation, cancelDictation, rec, history, settings, showSettings };
+  globalThis.__slimvoice = { toggleDictation, stopDictation, cancelDictation, rec, history, settings, showSettings, engine, localDownload };
 }
 module.exports = { quitting: () => quitting };

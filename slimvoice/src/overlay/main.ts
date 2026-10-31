@@ -15,6 +15,10 @@ const TEXT: Record<Lang, Record<string, string>> = {
     settings: 'Einstellungen',
     hint: '{key} zum Beenden · du kannst weitertippen',
     'err.no_key': 'Kein API-Schlüssel für {provider} eingetragen.',
+    'err.local_missing': 'Das Sprachmodell ist noch nicht heruntergeladen.',
+    'err.local': 'Die lokale Spracherkennung hatte ein Problem.',
+    'setup': 'Einrichten',
+    'warn.ai_no_key': 'KI-Korrektur übersprungen – kein Dienst eingerichtet.',
     'err.auth': 'Der Dienst lehnt den API-Schlüssel ab.',
     'err.quota': 'Limit oder Guthaben beim Dienst erreicht.',
     'err.network': 'Keine Verbindung zum Dienst.',
@@ -41,6 +45,10 @@ const TEXT: Record<Lang, Record<string, string>> = {
     settings: 'Settings',
     hint: '{key} to finish · you can keep typing',
     'err.no_key': 'No API key set for {provider}.',
+    'err.local_missing': 'The speech model has not been downloaded yet.',
+    'err.local': 'Local speech recognition ran into a problem.',
+    'setup': 'Set up',
+    'warn.ai_no_key': 'AI correction skipped – no service set up.',
     'err.auth': 'The service rejected the API key.',
     'err.quota': 'Rate limit or credit used up at the service.',
     'err.network': 'Cannot reach the service.',
@@ -202,7 +210,8 @@ window.api.on('ui:event', (ev: any) => {
       if (sounds) beep('error');
       const key = TEXT.en['err.' + ev.code] ? 'err.' + ev.code : 'err.error';
       setState('error', t(key, { provider: PROVIDERS[ev.provider] || ev.provider || '' }));
-      setNote(ev.message && ev.code !== 'no_key' ? String(ev.message).slice(0, 160) : '');
+      btnSettings.textContent = ev.code === 'no_key' || ev.code === 'local_missing' ? t('setup') : t('settings');
+      setNote(ev.message && !['no_key', 'local_missing'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
       break;
     }
     case 'info':

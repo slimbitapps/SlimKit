@@ -595,3 +595,340 @@ kbd {
 .loading {
   height: 100%;
 }
+
+/* ---------------------------------------------------------------- Einrichtung */
+.pad {
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pad > .row:last-child,
+.pad > .toggle-row:last-child {
+  border-bottom: 0;
+}
+.spacer {
+  flex: 1;
+}
+.link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.badge.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.banner.ok {
+  background: var(--success-soft);
+  color: var(--success);
+  cursor: default;
+}
+.banner.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+  cursor: default;
+  margin: 0;
+}
+.source-cards,
+.provider-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.provider-cards {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.source,
+.provider {
+  text-align: left;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.provider {
+  padding: 12px;
+}
+.source > span:not(.source-icon):not(.tags),
+.provider > span:not(.tags) {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.source strong {
+  font-size: 15px;
+}
+.source.on,
+.provider.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-line) inset;
+}
+.source-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  display: grid;
+  place-items: center;
+}
+.source-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--accent);
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tags em {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--surface-3);
+  color: var(--text-2);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+
+.local {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.model-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.model {
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.model.on {
+  border-color: var(--success);
+  box-shadow: 0 0 0 1px var(--success) inset;
+}
+.model p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+  flex: 1;
+}
+.model-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.model-meta {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.model .btn {
+  align-self: flex-start;
+}
+.progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.guide {
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.guide-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.guide-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.45;
+}
+.guide-steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.key-row .input {
+  flex: 1;
+  min-width: 220px;
+}
+.key-ok {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wizard-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 22px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wizard-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 13px;
+  padding-right: 10px;
+}
+.wizard-steps li span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  font-size: 12px;
+}
+.wizard-steps li.on {
+  color: var(--text);
+}
+.wizard-steps li.on span {
+  background: var(--accent);
+  color: #fff;
+}
+.wizard-steps li.done span {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.wizard .hero p {
+  margin-bottom: 4px;
+}
+.step-title {
+  font-size: 17px;
+  margin: 6px 0 0;
+}
+.wizard-nav {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.try-box {
+  padding: 12px 0;
+}
+.try-box textarea.input {
+  margin: 8px 0;
+}
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.status-card {
+  position: relative;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px 14px 14px 30px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.status-card:hover {
+  border-color: var(--line-2);
+}
+.status-card .label {
+  font-size: 12px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dot-state {
+  position: absolute;
+  left: 13px;
+  top: 19px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.dot-state.ok {
+  background: var(--success);
+}
+.dot-state.bad {
+  background: var(--danger);
+}
+.dot-state.off {
+  background: var(--text-3);
+}
+.hint.machine {
+  margin: 0;
+}

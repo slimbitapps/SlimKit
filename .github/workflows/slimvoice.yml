@@ -63,6 +63,28 @@ jobs:
           path: slimvoice/release/*.dmg
           if-no-files-found: error
 
+  # Lokale Spracherkennung wirklich ausprobieren: Modell herunterladen, gesprochenen Satz erkennen
+  local-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - run: sudo apt-get update && sudo apt-get install -y espeak-ng ffmpeg xvfb
+      - run: npm ci
+      - run: npm run build
+      - name: Gesprochenen Testsatz erzeugen
+        run: |
+          espeak-ng -v en-us -s 140 -w /tmp/speech.wav "Hello world. This is a test of the local speech recognition."
+          ffmpeg -loglevel error -y -i /tmp/speech.wav -af "adelay=800,apad=pad_dur=4" -ar 48000 -ac 1 /tmp/mic.wav
+      - name: Lokale Erkennung (Modell klein)
+        env: { SPEECH_WAV: /tmp/mic.wav, LOCAL_MODEL: base }
+        run: xvfb-run -a node test/e2e/local.cjs
+      - name: Lokale Erkennung (Modell mittel, Live-Vorschau)
+        env: { SPEECH_WAV: /tmp/mic.wav, LOCAL_MODEL: small, LOCAL_MODE: preview }
+        run: xvfb-run -a node test/e2e/local.cjs
+
   release:
     needs: [windows, mac]
     runs-on: ubuntu-latest

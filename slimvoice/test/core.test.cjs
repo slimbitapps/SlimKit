@@ -91,7 +91,19 @@ test('Einstellungen: Standardwerte und Schlüssel', () => {
 
 test('Modelle nach Tempo', () => {
   const svc = structuredClone(DEFAULTS.services);
-  let m = providers.resolveModels(svc, 'fast');
+  // Standard: lokal, Modell „small“, keine KI ohne Schlüssel
+  let m = providers.resolveModels(svc, 'fast', () => false);
+  assert.equal(m.sttProvider, 'local');
+  assert.equal(m.sttMain, 'onnx-community/whisper-small');
+  assert.equal(m.sttPreview, m.sttMain);
+  assert.equal(m.llmModel, '');
+  // lokal + Groq-Schlüssel → KI-Korrektur automatisch über Groq
+  m = providers.resolveModels(svc, 'fast', (k) => k === 'groq');
+  assert.equal(m.llmProvider, 'groq');
+  svc.local.model = 'turbo';
+  assert.equal(providers.resolveModels(svc, 'best').sttMain, 'onnx-community/whisper-large-v3-turbo');
+  svc.stt.provider = 'openai';
+  m = providers.resolveModels(svc, 'fast');
   assert.equal(m.sttMain, 'gpt-4o-mini-transcribe');
   assert.equal(m.llmProvider, 'openai');
   svc.stt.provider = 'custom';
