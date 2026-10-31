@@ -92,7 +92,7 @@ jobs:
       - run: npm test
       - run: npx tauri build --bundles dmg
       - name: Selbsttest der fertigen App auf Apple-Chip (Metal + Prozessor, Zeit messen)
-        run: src-tauri/target/release/bundle/macos/SlimVoice.app/Contents/MacOS/SlimVoice --selftest=small
+        run: src-tauri/target/release/slimvoice --selftest=small
       - run: |
           mkdir -p out
           cp src-tauri/target/release/bundle/dmg/*.dmg out/SlimVoice-Mac.dmg
