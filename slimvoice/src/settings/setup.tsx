@@ -164,6 +164,24 @@ export function LocalModels({ compact }: { compact?: boolean }) {
       {!compact && (
         <div className="row">
           <div className="row-label">
+            <div>{L('Im Arbeitsspeicher halten', 'Keep in memory')}</div>
+            <div className="hint">{L('Danach wird das Modell entladen, um Speicher freizugeben. Das nächste Diktat lädt es in Sekunden neu.', 'Afterwards the model is unloaded to free memory. The next dictation reloads it in seconds.')}</div>
+          </div>
+          <div className="row-control">
+            <select className="select" value={String(local.keepLoadedMin)} aria-label={L('Im Arbeitsspeicher halten', 'Keep in memory')} onChange={(e) => set({ services: { local: { keepLoadedMin: +e.target.value } } })}>
+              {[5, 15, 60].map((m) => (
+                <option key={m} value={m}>
+                  {m} {L('Minuten', 'minutes')}
+                </option>
+              ))}
+              <option value={0}>{L('Immer', 'Always')}</option>
+            </select>
+          </div>
+        </div>
+      )}
+      {!compact && (
+        <div className="row">
+          <div className="row-label">
             <div>{L('Rechnen auf', 'Compute on')}</div>
             <div className="hint">{L('Automatisch nimmt die Grafikkarte, wenn sie geht.', 'Automatic uses the graphics card when possible.')}</div>
           </div>

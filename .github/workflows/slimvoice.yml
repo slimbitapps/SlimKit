@@ -28,6 +28,13 @@ jobs:
       - name: Installer (Setup.exe) + portable ZIP
         shell: bash
         run: npx electron-builder --win nsis zip --x64 --publish never
+      - name: Selbsttest der gepackten App (Tastatur-Hook + lokale Engine enthalten)
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'selftest.json'
+          Start-Process -Wait -FilePath 'release\win-unpacked\SlimVoice.exe' -ArgumentList "--selftest=$out"
+          Get-Content $out
+          if (-not (Select-String -Path $out -Pattern '"ok": true' -Quiet)) { exit 1 }
       - uses: actions/upload-artifact@v4
         with:
           name: SlimVoice-Windows
@@ -53,6 +60,10 @@ jobs:
           npx electron-builder --mac dir --arm64 --x64 -c.mac.identity=null --publish never
           codesign --force --deep --sign - release/mac-arm64/SlimVoice.app
           codesign --force --deep --sign - release/mac/SlimVoice.app
+          # Selbsttest der gepackten App (Apple-Chip)
+          release/mac-arm64/SlimVoice.app/Contents/MacOS/SlimVoice --selftest="$RUNNER_TEMP/selftest.json" || true
+          cat "$RUNNER_TEMP/selftest.json"
+          grep -q '"ok": true' "$RUNNER_TEMP/selftest.json"
           npx electron-builder --mac dmg --arm64 -c.mac.identity=null --prepackaged release/mac-arm64/SlimVoice.app --publish never
           npx electron-builder --mac dmg --x64 -c.mac.identity=null --prepackaged release/mac/SlimVoice.app --publish never
           mv release/SlimVoice-Mac-arm64.dmg release/SlimVoice-Mac.dmg

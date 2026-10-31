@@ -14,6 +14,12 @@ const TEXT: Record<Lang, Record<string, string>> = {
     cancel: 'Abbrechen',
     settings: 'Einstellungen',
     hint: '{key} zum Beenden · du kannst weitertippen',
+    'hint.hold': '{hold} loslassen zum Beenden',
+    'hint.tap': '{hold} nochmal tippen zum Beenden · du kannst weitertippen',
+    'cmd.selection': 'Befehl für die Markierung',
+    'cmd.write': 'Befehl: neuen Text schreiben',
+    'cmd.hint': 'z. B. „mach das förmlicher“ · {key} zum Beenden',
+    'err.no_llm': 'Der Befehlsmodus braucht einen KI-Dienst.',
     'err.no_key': 'Kein API-Schlüssel für {provider} eingetragen.',
     'err.local_missing': 'Das Sprachmodell ist noch nicht heruntergeladen.',
     'err.local': 'Die lokale Spracherkennung hatte ein Problem.',
@@ -44,6 +50,12 @@ const TEXT: Record<Lang, Record<string, string>> = {
     cancel: 'Cancel',
     settings: 'Settings',
     hint: '{key} to finish · you can keep typing',
+    'hint.hold': 'release {hold} to finish',
+    'hint.tap': 'tap {hold} again to finish · you can keep typing',
+    'cmd.selection': 'Command for the selection',
+    'cmd.write': 'Command: write new text',
+    'cmd.hint': 'e.g. “make this more formal” · {key} to finish',
+    'err.no_llm': 'Command mode needs an AI service.',
     'err.no_key': 'No API key set for {provider}.',
     'err.local_missing': 'The speech model has not been downloaded yet.',
     'err.local': 'Local speech recognition ran into a problem.',
@@ -129,8 +141,10 @@ window.api.on('rec:start', async (o: any) => {
   document.body.classList.toggle('top', o.position === 'top');
   applyLabels();
   setPreview('');
-  setNote(t('hint', { key: hotkey }));
-  setState('listening');
+  const how = o.command ? 'cmd' : o.how === 'hold' || o.how === 'tap' ? o.how : '';
+  setNote(how === 'cmd' ? t('cmd.hint', { key: hotkey }) : how ? t('hint.' + how, { hold: o.holdKey }) : t('hint', { key: hotkey }));
+  setState('listening', o.command ? t('cmd.' + o.command) : undefined);
+  root.classList.toggle('command', !!o.command);
   startedAt = Date.now();
   timer.textContent = '0:00';
   clearInterval(tick);
@@ -210,8 +224,8 @@ window.api.on('ui:event', (ev: any) => {
       if (sounds) beep('error');
       const key = TEXT.en['err.' + ev.code] ? 'err.' + ev.code : 'err.error';
       setState('error', t(key, { provider: PROVIDERS[ev.provider] || ev.provider || '' }));
-      btnSettings.textContent = ev.code === 'no_key' || ev.code === 'local_missing' ? t('setup') : t('settings');
-      setNote(ev.message && !['no_key', 'local_missing'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
+      btnSettings.textContent = ['no_key', 'local_missing', 'no_llm'].includes(ev.code) ? t('setup') : t('settings');
+      setNote(ev.message && !['no_key', 'local_missing', 'no_llm'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
       break;
     }
     case 'info':

@@ -93,7 +93,11 @@ function startServer() {
       const user = msg.messages[1].content;
       calls.llm.push({ model: msg.model, user });
       const dictation = /<dictation>\n([\s\S]*)\n<\/dictation>/.exec(user)?.[1];
-      if (!dictation) return json({ choices: [{ message: { content: 'OK' } }] });
+      if (!dictation) {
+        const instr = /<instruction>\n([\s\S]*)\n<\/instruction>/.exec(user)?.[1];
+        const sel = /<selected_text>\n([\s\S]*)\n<\/selected_text>/.exec(user)?.[1];
+        return json({ choices: [{ message: { content: instr ? `[${instr}] ${sel || ''}`.trim() : 'OK' } }] });
+      }
       return json({ choices: [{ message: { content: dictation.replace(/welt/i, 'Welt').replace(/test$/i, 'Test') + '.' } }] });
     }
     res.writeHead(404).end();
@@ -121,7 +125,7 @@ function startServer() {
   const app = await electron.launch({
     executablePath: require('electron'),
     args: [ROOT, '--no-sandbox', '--lang=de'],
-    env: { ...process.env, SLIMVOICE_TEST: '1', SLIMVOICE_USERDATA: userData, SLIMVOICE_OUTPUT: out, SLIMVOICE_FAKE_AUDIO: wav, SLIMVOICE_RAW_AUDIO: '1', SLIMVOICE_FG_APP: 'OUTLOOK' },
+    env: { ...process.env, SLIMVOICE_TEST: '1', SLIMVOICE_USERDATA: userData, SLIMVOICE_OUTPUT: out, SLIMVOICE_FAKE_AUDIO: wav, SLIMVOICE_RAW_AUDIO: '1', SLIMVOICE_FG_APP: 'OUTLOOK', SLIMVOICE_SELECTION: 'Hey Leute' },
   });
   const errors = [];
   const pageFor = async (name) => {
@@ -225,6 +229,35 @@ function startServer() {
     assert.ok(calls.stt.every((c) => c.model === 'big-whisper'));
     assert.equal(calls.llm.length, 0, 'KI aus');
     console.log('✓ Modus Sofort einfügen (Füllwörter weg, KI aus)');
+
+    // ---------------------------------------------------------------- Taste halten (Push-to-talk) – Hook simuliert
+    fs.writeFileSync(out, '');
+    await sv(() => globalThis.__slimvoice.holdMachine.keydown(3613));
+    await waitFor(() => sv(() => globalThis.__slimvoice.rec.state === 'recording'), 3000, 'Halten startet');
+    await sleep(4000);
+    await sv(() => globalThis.__slimvoice.holdMachine.keyup(3613));
+    await waitFor(() => readOut().length > 0, 15000, 'Loslassen fügt ein');
+    console.log('  eingefügt:', JSON.stringify(readOut()));
+    // Tastenkombination (rechte Strg + C) darf nichts auslösen
+    await sv(() => (globalThis.__slimvoice.holdMachine.keydown(3613), globalThis.__slimvoice.holdMachine.keydown(46)));
+    await sleep(600);
+    assert.equal(await sv(() => globalThis.__slimvoice.rec.state), 'idle', 'Kombination startet nichts');
+    await sv(() => (globalThis.__slimvoice.holdMachine.keyup(46), globalThis.__slimvoice.holdMachine.keyup(3613)));
+    console.log('✓ Taste halten zum Sprechen, Tastenkombinationen werden ignoriert');
+
+    // ---------------------------------------------------------------- Befehlsmodus
+    fs.writeFileSync(out, '');
+    calls.llm.length = 0;
+    await sv(() => globalThis.__slimvoice.toggleDictation({ command: true }));
+    await waitFor(async () => /Markierung/.test(await overlay.locator('#status').innerText()), 5000, 'Befehlsmodus-Anzeige');
+    await overlay.screenshot({ path: path.join(SHOTS, 'overlay-4-befehl.png') });
+    await sleep(4000);
+    await sv(() => globalThis.__slimvoice.toggleDictation());
+    await waitFor(() => readOut().length > 0, 15000, 'Befehl ausgeführt');
+    console.log('  eingefügt:', JSON.stringify(readOut()));
+    assert.match(readOut(), /^\[.+\] Hey Leute$/, 'KI bekam Anweisung + Markierung');
+    assert.match(calls.llm[0].user, /<selected_text>\nHey Leute/);
+    console.log('✓ Befehlsmodus: Markierung + gesprochene Anweisung → KI → ersetzt');
 
     // ---------------------------------------------------------------- Modus „Erst aufnehmen“ + Abbrechen
     fs.writeFileSync(out, '');

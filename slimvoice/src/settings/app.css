@@ -932,3 +932,49 @@ kbd {
 .hint.machine {
   margin: 0;
 }
+
+.meter {
+  width: 180px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--text-3);
+  transition: width 60ms linear;
+}
+.meter i.ok {
+  background: var(--success);
+}
+.meter i.loud {
+  background: var(--warn);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.stats > div {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.stats strong {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.stats span {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.hint .error,
+span.error {
+  color: var(--danger);
+}

@@ -15,7 +15,7 @@ esbuild.buildSync({
   platform: 'node',
   target: 'node22',
   format: 'cjs',
-  external: ['electron'],
+  external: ['electron', 'uiohook-napi'],
   minify: true,
   legalComments: 'none',
   logLevel: 'warning',

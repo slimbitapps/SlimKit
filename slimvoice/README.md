@@ -9,6 +9,14 @@ landet dort, wo der Cursor steht, in **jeder** App. Die Anzeige nimmt nie den Fo
 
 ## Was es kann
 
+**Drei Arten zu starten**
+- **Taste halten** (Standard: rechte Strg-Taste, Mac: rechte ⌘-Taste): Halten = sprechen, loslassen = fertig.
+  Kurz tippen = freihändig, nochmal tippen = fertig. Tastenkombinationen wie rechte Strg+C lösen nichts aus.
+- **Tastenkürzel** Strg+Umschalt+Leertaste (Mac: ⌘⇧Leertaste) zum Starten und Beenden.
+- **Befehlsmodus** (Alt+Umschalt+Leertaste): Text markieren und sagen, was passieren soll, z. B. „mach das förmlicher“,
+  „übersetze ins Englische“ oder „fasse in drei Punkten zusammen“. Die KI ersetzt die Markierung.
+  Ohne Markierung schreibt sie neuen Text („schreib eine kurze Absage für morgen“).
+
 **Einrichtungs-Assistent** beim ersten Start: Du wählst, ob die Erkennung **auf deinem Computer** läuft
 (kostenlos, privat, offline, ohne Konto) oder **über einen Online-Dienst** (am schnellsten). Für jeden Dienst
 gibt es eine Schritt-für-Schritt-Anleitung, wie du an den API-Schlüssel kommst. Der Schlüssel wird beim Einfügen sofort geprüft.
@@ -114,9 +122,6 @@ npm run dist:mac
 
 ## Bekannte Grenzen / nächste Schritte
 
-- **Gedrückt halten zum Sprechen** (Push-to-talk) geht mit Electrons Tastenkürzeln nicht, weil es kein „Taste
-  losgelassen“-Ereignis gibt. Dafür bräuchte es einen kleinen nativen Tastatur-Hook. Bis dahin gilt: einmal drücken
-  zum Starten, nochmal zum Beenden.
 - **Echtes Wort-für-Wort-Streaming** (Realtime-APIs per WebSocket) wäre der nächste Schritt für die Vorschau.
   Aktuell aktualisiert sie sich satzweise nach jeder Pause.
 - Lokale KI-Korrektur (kleines Sprachmodell auf dem Rechner). Bisher braucht die Korrektur einen Online-Dienst.

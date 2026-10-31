@@ -226,3 +226,11 @@ button[hidden] {
 [data-state='error'] .note {
   color: var(--warn);
 }
+
+/* Befehlsmodus: violett statt rot, damit man es sofort unterscheidet */
+#pill.command .mic {
+  background: rgba(160, 110, 255, 0.18);
+}
+#pill.command .bars i {
+  background: #a06eff;
+}

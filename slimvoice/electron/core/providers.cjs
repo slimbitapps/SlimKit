@@ -283,7 +283,7 @@ function resolveModels(services, tempo, hasKey = () => true) {
   if (stt.local) {
     const id = (LOCAL_MODELS[services.local?.model] || LOCAL_MODELS.small).id;
     // lokal: Vorschau und Endergebnis mit demselben Modell → Vorschau wird wiederverwendet, keine doppelte Rechenzeit
-    return { sttProvider, sttMain: id, sttPreview: id, sttMaxSeconds: stt.maxSeconds, llmProvider, llmModel: llm ? services.llm.model || llm.main[tempo] : '' };
+    return { sttProvider, sttMain: id, sttPreview: id, sttMaxSeconds: stt.maxSeconds, pipeline: true, llmProvider, llmModel: llm ? services.llm.model || llm.main[tempo] : '' };
   }
   return {
     sttProvider,

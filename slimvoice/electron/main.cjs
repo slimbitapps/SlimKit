@@ -14,6 +14,25 @@ if (process.env.SLIMVOICE_FAKE_AUDIO) {
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.SLIMVOICE_FAKE_AUDIO);
 }
+// Selbsttest der fertig gepackten App (für die automatischen Builds): lädt die nativen Teile und beendet sich
+const selftest = process.argv.find((a) => a.startsWith('--selftest='));
+if (selftest) {
+  const out = { ok: true, checks: {} };
+  const fsx = require('node:fs');
+  const px = require('node:path');
+  try {
+    const { uIOhook } = require('uiohook-napi');
+    out.checks.hook = typeof uIOhook.start === 'function';
+  } catch (e) {
+    out.checks.hook = String(e.message || e);
+  }
+  const dist = px.join(__dirname, '..', 'dist');
+  for (const f of ['index.html', 'overlay.html', 'engine.html', 'ort/ort-wasm-simd-threaded.asyncify.wasm', 'tray/tray.png']) out.checks[f] = fsx.existsSync(px.join(dist, f));
+  out.ok = Object.values(out.checks).every((v) => v === true);
+  fsx.writeFileSync(selftest.slice('--selftest='.length), JSON.stringify(out, null, 2));
+  app.exit(out.ok ? 0 : 1);
+}
+
 // Eigenes Schema für die lokale Spracherkennung: mit „cross-origin isolation“ darf WebAssembly mehrere Prozessorkerne nutzen
 protocol.registerSchemesAsPrivileged([{ scheme: 'slimvoice', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true } }]);
 if (!isTest && !app.requestSingleInstanceLock()) {
@@ -31,6 +50,8 @@ const providers = require('./core/providers.cjs');
 const { encodeWav } = require('./core/wav.cjs');
 const { makeT, prettyAccel } = require('./core/strings.cjs');
 const { LocalEngine } = require('./core/local-engine.cjs');
+const { KeyHoldMachine, HOLD_KEYS, startHook } = require('./core/keyhook.cjs');
+const { buildCommand, cleanModelOutput } = require('./core/prompts.cjs');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 
@@ -102,7 +123,12 @@ function withTimeout(promise, ms, fallback) {
   return Promise.race([promise, new Promise((r) => setTimeout(() => r(fallback), ms))]);
 }
 
-async function startDictation() {
+/**
+ * Diktat starten.
+ * opts.how: 'hotkey' | 'hold' | 'tap' (für den Hinweis im Overlay)
+ * opts.command: Befehlsmodus – gesprochene Anweisung auf markierten Text anwenden
+ */
+async function startDictation(opts = {}) {
   if (rec.state !== 'idle') return;
   const cfg = settings.public();
   const id = ++rec.id;
@@ -112,7 +138,7 @@ async function startDictation() {
   showOverlay();
 
   const models = resolveModels(cfg);
-  const problem = sttProblem(cfg, models);
+  const problem = sttProblem(cfg, models) || (opts.command && (!models.llmModel || !hasKey(models.llmProvider)) ? { code: 'no_llm' } : null);
   if (problem) {
     rec.state = 'idle';
     updateTray();
@@ -120,20 +146,41 @@ async function startDictation() {
     return;
   }
   // KI-Korrektur gewünscht, aber kein Dienst mit Schlüssel → ohne KI weitermachen statt abzubrechen
-  if (cfg.ai.level !== 'off' && (!models.llmModel || !hasKey(models.llmProvider))) {
+  if (!opts.command && cfg.ai.level !== 'off' && (!models.llmModel || !hasKey(models.llmProvider))) {
     models.llmModel = '';
     overlayEvent({ id, type: 'warning', code: 'ai_no_key' });
   }
-  if (isMac && !isTest && cfg.dictation.insert !== 'copy' && !systemPreferences.isTrustedAccessibilityClient(false)) {
-    overlayEvent({ id, type: 'warning', code: 'mac_accessibility' });
-  }
+  const macNoAccess = isMac && !isTest && !systemPreferences.isTrustedAccessibilityClient(false);
+  if (macNoAccess && cfg.dictation.insert !== 'copy') overlayEvent({ id, type: 'warning', code: 'mac_accessibility' });
+  // lokales Modell schon mal laden (falls es aus dem Speicher genommen wurde) – parallel zur Aufnahme
+  if (models.sttProvider === 'local') warmLocal(cfg);
 
+  // Befehlsmodus: erst die Markierung holen (die App im Vordergrund hat noch den Fokus)
+  let selection = '';
+  if (opts.command) {
+    if (isMac) await new Promise((r) => setTimeout(r, 200)); // Finger von ⌥⇧ runter lassen
+    selection = macNoAccess ? '' : await withTimeout(inserter.copySelection(), 1500, '');
+  }
   const appName = await withTimeout(inserter.foregroundApp(), 400, '');
-  const insertMethod =
-    isMac && !isTest && cfg.dictation.insert !== 'copy' && !systemPreferences.isTrustedAccessibilityClient(false) ? 'copy' : cfg.dictation.insert;
+  const insertMethod = macNoAccess && cfg.dictation.insert !== 'copy' ? 'copy' : cfg.dictation.insert;
+  const insert = async (text) => {
+    lastText = text;
+    try {
+      await inserter.insert(text, insertMethod, cfg.dictation.restoreClipboard);
+    } catch (e) {
+      log('insert failed', e);
+      clipboard.writeText(text);
+      overlayEvent({ id, type: 'warning', code: 'insert_failed' });
+    }
+  };
+  const complete = (o) =>
+    providers.complete({ ...o, provider: models.llmProvider, apiKey: keyFor(models.llmProvider), baseUrl: cfg.services.llm.baseUrl, model: models.llmModel, tempo: cfg.dictation.tempo });
+
+  // Im Befehlsmodus wird die Anweisung nur erkannt (ohne Korrektur, ohne Einfügen) – das Ergebnis macht dann die KI
+  const sessCfg = opts.command ? { ...cfg, dictation: { ...cfg.dictation, mode: 'batch', trailingSpace: false }, ai: { ...cfg.ai, level: 'off', voiceCommands: false, replacements: [] } } : cfg;
   const sess = new DictationSession({
     id,
-    cfg,
+    cfg: sessCfg,
     models,
     appName,
     deps: {
@@ -141,42 +188,32 @@ async function startDictation() {
         models.sttProvider === 'local'
           ? localTranscribe(o, cfg)
           : providers.transcribe({ ...o, provider: models.sttProvider, apiKey: keyFor(models.sttProvider), baseUrl: cfg.services.stt.baseUrl }),
-      complete: (o) =>
-        providers.complete({
-          ...o,
-          provider: models.llmProvider,
-          apiKey: keyFor(models.llmProvider),
-          baseUrl: cfg.services.llm.baseUrl,
-          model: models.llmModel,
-          tempo: cfg.dictation.tempo,
-        }),
-      insert: async (text) => {
-        lastText = text;
-        try {
-          await inserter.insert(text, insertMethod, cfg.dictation.restoreClipboard);
-        } catch (e) {
-          log('insert failed', e);
-          clipboard.writeText(text);
-          overlayEvent({ id, type: 'warning', code: 'insert_failed' });
-        }
-      },
+      complete,
+      insert: opts.command ? async () => {} : insert,
       emit: (ev) => overlayEvent({ id, ...ev }),
     },
   });
+  if (opts.command) {
+    sess.command = { selection, complete, insert, cfg };
+    sess.mode = 'command';
+  }
   rec.session = sess;
   if (rec.state !== 'recording' || rec.id !== id) return; // schon wieder abgebrochen
   overlayEvent({ id, type: 'info', app: appName, profile: sess.profile?.match || '' });
   sendOverlay('rec:start', {
     id,
     lang: uiLang(),
-    mode: cfg.dictation.mode,
+    mode: opts.command ? 'batch' : cfg.dictation.mode,
     position: cfg.dictation.overlay,
     micId: cfg.dictation.micId,
     pauseMs: pauseMsFor(cfg),
     sensitivity: cfg.dictation.sensitivity,
     sounds: cfg.dictation.sounds,
     processing: process.env.SLIMVOICE_RAW_AUDIO ? false : cfg.dictation.audioProcessing !== false,
-    hotkey: prettyAccel(cfg.hotkey.toggle, process.platform, uiLang()),
+    hotkey: prettyAccel(opts.command ? cfg.hotkey.command : cfg.hotkey.toggle, process.platform, uiLang()),
+    how: opts.how || 'hotkey',
+    holdKey: holdKeyLabel(),
+    command: opts.command ? (selection ? 'selection' : 'write') : '',
   });
   clearTimeout(rec.maxTimer);
   rec.maxTimer = setTimeout(() => rec.id === id && stopDictation(), Math.max(1, cfg.dictation.maxMinutes) * 60000);
@@ -205,9 +242,66 @@ function cancelDictation() {
   hideOverlaySoon(150);
 }
 
-function toggleDictation() {
+function toggleDictation(opts) {
   if (rec.state === 'recording') stopDictation();
-  else startDictation();
+  else startDictation(opts);
+}
+
+/** Befehlsmodus: erkannte Anweisung + Markierung → KI → einfügen (ersetzt die Markierung) */
+async function runCommand(sess, instruction) {
+  const { selection, complete, insert, cfg } = sess.command;
+  const { system, user } = buildCommand({ instruction, selection, style: sess.ai.style, vocabulary: cfg.ai.vocabulary, customInstruction: cfg.ai.customInstruction });
+  const out = cleanModelOutput(await complete({ system, user }));
+  if (out && !sess.cancelled) await insert(out);
+  return out;
+}
+
+// ------------------------------------------------------------------ Taste halten (Push-to-talk)
+const holdMachine = new KeyHoldMachine({
+  isRecording: () => rec.state === 'recording',
+  onStart: (how) => startDictation({ how }),
+  onStop: () => stopDictation(),
+  onAbort: () => cancelDictation(),
+});
+let hook = null;
+function holdKeyName() {
+  const k = settings.data.hotkey.hold;
+  if (k === 'auto') return isMac ? 'MetaRight' : 'CtrlRight';
+  return k || '';
+}
+function holdKeyLabel() {
+  const de = uiLang() === 'de';
+  const names = {
+    CtrlRight: de ? 'rechte Strg-Taste' : 'right Ctrl',
+    AltRight: isMac ? (de ? 'rechte ⌥-Taste' : 'right ⌥') : 'AltGr',
+    ShiftRight: de ? 'rechte Umschalttaste' : 'right Shift',
+    MetaRight: isMac ? (de ? 'rechte ⌘-Taste' : 'right ⌘') : de ? 'rechte Windows-Taste' : 'right Windows key',
+    CapsLock: de ? 'Feststelltaste' : 'Caps Lock',
+  };
+  const k = holdKeyName();
+  return names[k] || k;
+}
+/** Hook nur starten, wenn eine Halte-Taste gewählt ist (Mac: erst mit Freigabe „Bedienungshilfen“) */
+function ensureHook() {
+  const key = holdKeyName();
+  holdMachine.setKey(HOLD_KEYS[key] || 0);
+  if (!key || isTest) return;
+  if (isMac && !systemPreferences.isTrustedAccessibilityClient(false)) return;
+  if (!hook) hook = startHook(holdMachine, log);
+}
+
+// ------------------------------------------------------------------ Lokales Modell im Speicher halten
+let unloadTimer = null;
+function warmLocal(cfg) {
+  clearTimeout(unloadTimer);
+  engine.send('load', { model: providers.LOCAL_MODELS[localKey(cfg)].id, device: cfg.services.local.device }).catch(() => {});
+}
+/** Nach X Minuten ohne Diktat Modell aus dem Arbeitsspeicher nehmen (lädt beim nächsten Mal in Sekunden aus dem Cache) */
+function scheduleUnload() {
+  clearTimeout(unloadTimer);
+  const min = settings.data.services.local.keepLoadedMin;
+  if (!min || min <= 0) return;
+  unloadTimer = setTimeout(() => engine.send('unload').catch(() => {}), min * 60000);
 }
 
 /** Aufnahme ist im Overlay fertig → Rest umwandeln, einfügen, im Verlauf merken */
@@ -219,6 +313,11 @@ async function finishSession(id) {
   try {
     const res = await sess.finish();
     if (sess.cancelled) return;
+    if (sess.command && res.raw) {
+      overlayEvent({ id, type: 'state', state: 'processing', text: res.raw });
+      res.raw = `${res.raw}${sess.command.selection ? `\n\n— ${sess.command.selection.slice(0, 500)}` : ''}`;
+      res.text = await runCommand(sess, res.text || res.raw);
+    }
     if (res.text) {
       const cfg = settings.data;
       if (cfg.history.keep) {
@@ -244,6 +343,7 @@ async function finishSession(id) {
     overlayEvent({ id, type: 'error', code: e.code || 'error', message: String(e.message || e) });
   } finally {
     running.delete(sess);
+    if (sess.models.sttProvider === 'local') scheduleUnload();
   }
 }
 
@@ -486,7 +586,7 @@ function registerHotkeys() {
   const { toggle, cancel } = settings.data.hotkey;
   if (toggle) {
     try {
-      res.toggle = globalShortcut.register(toggle, toggleDictation);
+      res.toggle = globalShortcut.register(toggle, () => toggleDictation({ how: 'hotkey' }));
     } catch {
       res.toggle = false;
     }
@@ -498,6 +598,16 @@ function registerHotkeys() {
       res.cancel = false;
     }
   }
+  const command = settings.data.hotkey.command;
+  res.command = true;
+  if (command) {
+    try {
+      res.command = globalShortcut.register(command, () => toggleDictation({ command: true }));
+    } catch {
+      res.command = false;
+    }
+  }
+  ensureHook();
   return res;
 }
 
@@ -512,6 +622,7 @@ function snapshot() {
     stt: Object.fromEntries(Object.entries(providers.STT).map(([k, v]) => [k, { label: v.label, models: v.models, preview: v.preview, main: v.main, baseUrl: v.baseUrl, keyOptional: !!v.keyOptional, keyUrl: v.keyUrl || '' }])),
     llm: Object.fromEntries(Object.entries(providers.LLM).map(([k, v]) => [k, { label: v.label, models: v.models, main: v.main, baseUrl: v.baseUrl, keyOptional: !!v.keyOptional, keyUrl: v.keyUrl || '' }])),
     hotkeys: hotkeyStatus,
+    hold: { key: holdKeyName(), label: holdKeyLabel(), active: !!hook || isTest, keys: Object.keys(HOLD_KEYS) },
     local: { models: providers.LOCAL_MODELS, status: engine.status, ramGB: Math.round(os.totalmem() / 1024 ** 3), cores: os.cpus().length },
     permissions: permissions(),
     dark: nativeTheme.shouldUseDarkColors,
@@ -524,7 +635,7 @@ function permissions() {
 let hotkeyStatus = { toggle: true, cancel: true };
 
 const handlers = {
-  'app:snapshot': () => snapshot(),
+  'app:snapshot': () => (ensureHook(), snapshot()),
   'settings:set': (partial) => {
     const before = settings.public();
     settings.update(partial);
@@ -541,7 +652,7 @@ const handlers = {
   /** Probiert ein Tastenkürzel aus, ohne es zu speichern */
   'hotkey:check': (accel) => {
     if (!accel) return true;
-    if (accel === settings.data.hotkey.toggle || accel === settings.data.hotkey.cancel) return true;
+    if ([settings.data.hotkey.toggle, settings.data.hotkey.cancel, settings.data.hotkey.command].includes(accel)) return true;
     try {
       const ok = globalShortcut.register(accel, () => {});
       if (ok) globalShortcut.unregister(accel);
@@ -609,6 +720,7 @@ const handlers = {
   'clipboard:write': (text) => clipboard.writeText(String(text)),
   'perm:request': async (what) => {
     if (!isMac) return permissions();
+    setTimeout(ensureHook, 4000);
     if (what === 'mic') await systemPreferences.askForMediaAccess('microphone');
     if (what === 'accessibility') {
       systemPreferences.isTrustedAccessibilityClient(true);
@@ -664,6 +776,7 @@ app.on('before-quit', () => {
 });
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  hook?.stop();
   inserter.dispose();
   engine.dispose();
 });
@@ -701,6 +814,6 @@ function isOwnPage(url) {
 
 // Für den Ende-zu-Ende-Test
 if (isTest) {
-  globalThis.__slimvoice = { toggleDictation, stopDictation, cancelDictation, rec, history, settings, showSettings, engine, localDownload };
+  globalThis.__slimvoice = { holdMachine, toggleDictation, stopDictation, cancelDictation, rec, history, settings, showSettings, engine, localDownload };
 }
 module.exports = { quitting: () => quitting };

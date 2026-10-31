@@ -50,6 +50,29 @@ function buildCorrection({ text, level = 'light', style = 'neutral', vocabulary 
   return { system: rules.join('\n'), user };
 }
 
+/**
+ * Befehlsmodus: gesprochene Anweisung auf markierten Text anwenden („mach das förmlicher“, „übersetze ins Englische“)
+ * oder – ohne Markierung – neuen Text nach Anweisung schreiben („schreib eine kurze Absage für morgen“).
+ */
+function buildCommand({ instruction, selection = '', style = 'neutral', vocabulary = [], customInstruction = '' }) {
+  const rules = [
+    'You are a writing tool inside a dictation app. The user gave a spoken instruction.',
+    selection
+      ? 'Apply the instruction to the selected text and return the complete new version of that text, which replaces the selection.'
+      : 'Nothing is selected: write the text the instruction asks for. It will be typed at the cursor.',
+    'Keep the language of the selected text unless the instruction asks for another language. If there is no selected text, use the language of the instruction.',
+    'Keep formatting (line breaks, lists) unless asked to change it.',
+    'Output only the resulting text – no explanation, no quotes, no preface like "Here is".',
+  ];
+  if (STYLES[style]) rules.push(STYLES[style]);
+  const vocab = (vocabulary || []).map((v) => String(v).trim()).filter(Boolean);
+  if (vocab.length) rules.push(`Correct spellings of names and terms: ${vocab.join(', ')}.`);
+  if (customInstruction?.trim()) rules.push(`Additional preference of the user: ${customInstruction.trim()}`);
+  let user = `<instruction>\n${instruction}\n</instruction>`;
+  if (selection) user = `<selected_text>\n${selection}\n</selected_text>\n\n` + user;
+  return { system: rules.join('\n'), user };
+}
+
 /** Prompt-Hinweis für die Spracherkennung selbst (Whisper & Co. nutzen ihn für Schreibweisen) */
 function sttPrompt({ vocabulary = [], context = '' }) {
   const vocab = (vocabulary || []).map((v) => String(v).trim()).filter(Boolean);
@@ -62,7 +85,7 @@ function sttPrompt({ vocabulary = [], context = '' }) {
 /** Ergebnis der KI aufräumen (falls doch Tags oder Anführungszeichen drumherum stehen) */
 function cleanModelOutput(out) {
   let t = String(out || '').trim();
-  t = t.replace(/^<dictation>\s*/i, '').replace(/\s*<\/dictation>$/i, '').trim();
+  t = t.replace(/^<(dictation|selected_text)>\s*/i, '').replace(/\s*<\/(dictation|selected_text)>$/i, '').trim();
   if (/^["„“«].*["“”»]$/su.test(t) && !/["„“«]/u.test(t.slice(1, -1))) t = t.slice(1, -1).trim();
   return t;
 }
@@ -81,4 +104,4 @@ function plausible(input, output, level, translating) {
   return b <= a * maxRatio + 40 && b >= a * minRatio - 10;
 }
 
-module.exports = { buildCorrection, sttPrompt, cleanModelOutput, plausible, LANG_NAMES };
+module.exports = { buildCommand, buildCorrection, sttPrompt, cleanModelOutput, plausible, LANG_NAMES };

@@ -1,6 +1,6 @@
 {
   "name": "slimvoice",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Better dictation for every app on Windows & Mac – speak, and clean text appears where your cursor is",
   "main": "electron/main.cjs",
   "private": true,
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
+    "@huggingface/transformers": "^4.3.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
@@ -41,8 +42,7 @@
     "files": [
       "dist/**",
       "package.json",
-      "!**/*.map",
-      "!node_modules/**"
+      "!**/*.map"
     ],
     "extraMetadata": {
       "main": "dist/main.cjs"
@@ -117,9 +117,12 @@
       "en",
       "en-US",
       "en-GB"
+    ],
+    "asarUnpack": [
+      "**/*.node"
     ]
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.3.2"
+    "uiohook-napi": "^1.5.5"
   }
 }

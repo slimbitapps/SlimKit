@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Cards, Keys, Row, Section, Segmented, Select, TextField, Toggle, HotkeyInput, useApp } from './ui';
 import { LANGUAGES, type Key } from './i18n';
 import { LLM_PROVIDERS, GUIDES, LOCAL_TEXT } from './guides';
@@ -186,14 +186,47 @@ function Wizard() {
   );
 }
 
+/** Wie viel wurde schon diktiert – und wie viel Zeit gespart (Tippen: ca. 40 Wörter/Minute) */
+function Stats() {
+  const L = useL();
+  const { lang } = useApp();
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  useEffect(() => {
+    window.api.call<HistoryItem[]>('history:list').then(setItems);
+    return window.api.on('history:changed', () => window.api.call<HistoryItem[]>('history:list').then(setItems));
+  }, []);
+  if (!items.length) return null;
+  const words = items.reduce((n, i) => n + (i.text.match(/\S+/g)?.length || 0), 0);
+  const speakMin = items.reduce((n, i) => n + i.seconds, 0) / 60;
+  const savedMin = Math.max(0, Math.round(words / 40 - speakMin));
+  const wpm = speakMin > 0 ? Math.round(words / speakMin) : 0;
+  const nf = new Intl.NumberFormat(lang);
+  return (
+    <div className="stats">
+      <div>
+        <strong>{nf.format(words)}</strong>
+        <span>{L('Wörter diktiert', 'words dictated')}</span>
+      </div>
+      <div>
+        <strong>{nf.format(savedMin)} min</strong>
+        <span>{L('gespart gegenüber Tippen', 'saved vs. typing')}</span>
+      </div>
+      <div>
+        <strong>{wpm || '—'}</strong>
+        <span>{L('Wörter pro Minute', 'words per minute')}</span>
+      </div>
+    </div>
+  );
+}
+
 function Overview() {
-  const { s, snap, set, nav, lang } = useApp();
+  const { s, snap, set, nav, lang, t } = useApp();
   const L = useL();
   const svc = s.services;
   const ready = sttReady(snap);
   const llm = llmProvider(snap);
   const local = svc.stt.provider === 'local';
-  const sttName = local ? `${L('Auf diesem Computer', 'On this computer')} · ${LOCAL_TEXT[lang][svc.local.model]?.name}` : GUIDES[lang][svc.stt.provider]?.name || svc.stt.provider;
+  const sttName = local ? `${L('Auf diesem Computer', 'On this computer')} · ${LOCAL_TEXT[lang][svc.local.model]?.name}` : svc.stt.provider === 'custom' ? t('svc.custom') : GUIDES[lang][svc.stt.provider]?.name || svc.stt.provider;
   const levelName = { off: L('Aus', 'Off'), punct: L('Nur Satzzeichen', 'Punctuation only'), light: L('Leicht', 'Light'), strong: L('Stark', 'Strong') }[s.ai.level];
   return (
     <div className="page">
@@ -207,15 +240,17 @@ function Overview() {
         <button className="status-card" onClick={() => nav('ai')}>
           <span className={'dot-state ' + (s.ai.level === 'off' ? 'off' : llm ? 'ok' : 'bad')} />
           <span className="label">{L('KI-Korrektur', 'AI correction')}</span>
-          <strong>{s.ai.level === 'off' ? levelName : `${levelName} · ${GUIDES[lang][llm]?.name || '—'}`}</strong>
+          <strong>{s.ai.level === 'off' ? levelName : `${levelName} · ${llm === 'custom' ? t('svc.custom') : GUIDES[lang][llm]?.name || '—'}`}</strong>
           {s.ai.level !== 'off' && !llm && <span className="hint error">{L('Kein Dienst eingerichtet – wird übersprungen', 'No service set up – skipped')}</span>}
         </button>
         <button className="status-card" onClick={() => nav('dictation')}>
           <span className="dot-state ok" />
-          <span className="label">{L('Tastenkürzel', 'Shortcut')}</span>
+          <span className="label">{L('Starten', 'Start')}</span>
           <strong>{s.hotkey.toggle ? <Keys accel={s.hotkey.toggle} /> : '—'}</strong>
+          {snap.hold.key && snap.hold.active && <span className="hint">{L('oder', 'or')} {snap.hold.label} {L('halten', 'hold')}</span>}
         </button>
       </div>
+      <Stats />
       <Section title={L('Ausprobieren', 'Try it')}>
         <TryIt />
       </Section>
@@ -250,8 +285,98 @@ function Perm({ label, ok, what }: { label: string; ok: boolean; what: string })
 }
 
 // ------------------------------------------------------------------ Diktat
+function HoldKeyRow() {
+  const { s, set, snap } = useApp();
+  const L = useL();
+  const mac = snap.platform === 'darwin';
+  const names: Record<string, string> = {
+    CtrlRight: L('Rechte Strg-Taste', 'Right Ctrl'),
+    AltRight: mac ? L('Rechte ⌥-Taste', 'Right ⌥') : L('AltGr (nicht empfohlen für deutsche Tastatur)', 'AltGr / right Alt'),
+    ShiftRight: L('Rechte Umschalttaste', 'Right Shift'),
+    MetaRight: mac ? L('Rechte ⌘-Taste', 'Right ⌘') : L('Rechte Windows-Taste', 'Right Windows key'),
+    CapsLock: L('Feststelltaste', 'Caps Lock'),
+  };
+  const opts: [string, string][] = [
+    ['auto', `${L('Standard', 'Default')} (${mac ? names.MetaRight : names.CtrlRight})`],
+    ['', L('Aus', 'Off')],
+    ...snap.hold.keys.map((k) => [k, names[k] || k] as [string, string]),
+  ];
+  return (
+    <Row
+      label={L('Taste halten zum Sprechen', 'Hold a key to talk')}
+      hint={
+        <>
+          {L('Halten = sprechen, loslassen = fertig. Kurz tippen = freihändig, nochmal tippen = fertig.', 'Hold = talk, release = done. Quick tap = hands-free, tap again = done.')}
+          {mac && !snap.permissions.accessibility && <span className="error"> {L('Braucht die Freigabe „Bedienungshilfen“ (siehe Start).', 'Needs the Accessibility permission (see Start).')}</span>}
+        </>
+      }
+    >
+      <Select label={L('Taste halten zum Sprechen', 'Hold a key to talk')} value={s.hotkey.hold} onChange={(hold) => set({ hotkey: { hold } })} options={opts} />
+    </Row>
+  );
+}
+
+/** Mikrofon ausprobieren: Pegel live anzeigen */
+function MicTest({ micId }: { micId: string }) {
+  const L = useL();
+  const [level, setLevel] = useState<number | null>(null);
+  const [err, setErr] = useState('');
+  const stopRef = useRef<() => void>(() => {});
+  useEffect(() => () => stopRef.current(), []);
+  const start = async () => {
+    setErr('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: micId ? { deviceId: { exact: micId } } : true });
+      const ctx = new AudioContext();
+      const an = ctx.createAnalyser();
+      an.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      let raf = 0;
+      const loop = () => {
+        an.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6));
+        raf = requestAnimationFrame(loop);
+      };
+      loop();
+      const timer = setTimeout(() => stopRef.current(), 15000);
+      stopRef.current = () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+        stream.getTracks().forEach((tr) => tr.stop());
+        ctx.close();
+        setLevel(null);
+        stopRef.current = () => {};
+      };
+    } catch (e) {
+      setErr(String((e as Error)?.message || e));
+    }
+  };
+  return (
+    <Row label={L('Mikrofon testen', 'Test microphone')} hint={level !== null ? L('Sprich etwas – der Balken sollte deutlich ausschlagen.', 'Say something – the bar should move clearly.') : err || undefined}>
+      {level === null ? (
+        <button className="btn small" onClick={start}>
+          {L('Test starten', 'Start test')}
+        </button>
+      ) : (
+        <div className="inline">
+          <div className="meter" aria-label={L('Pegel', 'Level')}>
+            <i style={{ width: `${Math.round(level * 100)}%` }} className={level > 0.85 ? 'loud' : level > 0.08 ? 'ok' : ''} />
+          </div>
+          <button className="btn small" onClick={() => stopRef.current()}>
+            {L('Stopp', 'Stop')}
+          </button>
+        </div>
+      )}
+    </Row>
+  );
+}
+
 export function Dictation() {
   const { t, s, set, snap, lang } = useApp();
+  const L = useL();
   const d = s.dictation;
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   useEffect(() => {
@@ -300,12 +425,23 @@ export function Dictation() {
       </Section>
 
       <Section title={t('dict.hotkey')} desc={t('dict.hotkey.d')}>
+        <HoldKeyRow />
         <Row label={t('dict.hotkey.toggle')}>
           <HotkeyInput label={t('dict.hotkey.toggle')} value={s.hotkey.toggle} onChange={(toggle) => set({ hotkey: { toggle } })} />
           {!snap.hotkeys.toggle && <div className="hint error">{t('dict.hotkey.taken')}</div>}
         </Row>
         <Row label={t('dict.hotkey.cancel')}>
           <HotkeyInput allowEmpty label={t('dict.hotkey.cancel')} value={s.hotkey.cancel} onChange={(cancel) => set({ hotkey: { cancel } })} />
+        </Row>
+        <Row
+          label={L('Befehlsmodus (markierten Text umschreiben)', 'Command mode (rewrite selected text)')}
+          hint={L(
+            'Text markieren, Kürzel drücken, sagen was passieren soll („mach das förmlicher“, „übersetze ins Englische“, „fasse zusammen“). Ohne Markierung schreibt die KI neuen Text („schreib eine kurze Absage für morgen“). Braucht einen KI-Dienst.',
+            'Select text, press the shortcut, say what should happen (“make this more formal”, “translate to English”, “summarise”). Without a selection the AI writes new text. Needs an AI service.',
+          )}
+        >
+          <HotkeyInput allowEmpty label={L('Befehlsmodus', 'Command mode')} value={s.hotkey.command} onChange={(command) => set({ hotkey: { command } })} />
+          {snap.hotkeys.command === false && <div className="hint error">{t('dict.hotkey.taken')}</div>}
         </Row>
       </Section>
 
@@ -327,6 +463,7 @@ export function Dictation() {
       </Section>
 
       <Section title={t('dict.recording')}>
+        <MicTest micId={d.micId} />
         <Row label={t('dict.mic')}>
           <Select label={t('dict.mic')} value={d.micId} onChange={(micId) => set({ dictation: { micId } })} options={[['', t('dict.mic.default')], ...mics.map((m, i) => [m.deviceId, m.label || `Mikrofon ${i + 1}`] as [string, string])]} />
         </Row>

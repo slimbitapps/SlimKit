@@ -11,7 +11,7 @@ export interface Profile {
 export interface Settings {
   onboarded: boolean;
   ui: { lang: '' | 'de' | 'en'; theme: 'system' | 'light' | 'dark' };
-  hotkey: { toggle: string; cancel: string };
+  hotkey: { toggle: string; cancel: string; hold: string; command: string };
   dictation: {
     mode: Mode;
     tempo: Tempo;
@@ -42,7 +42,7 @@ export interface Settings {
   services: {
     stt: { provider: string; model: string; fastModel: string; baseUrl: string };
     llm: { provider: string; model: string; baseUrl: string };
-    local: { model: LocalKey; device: 'auto' | 'gpu' | 'cpu'; ready: Partial<Record<LocalKey, boolean>> };
+    local: { model: LocalKey; device: 'auto' | 'gpu' | 'cpu'; ready: Partial<Record<LocalKey, boolean>>; keepLoadedMin: number };
   };
   history: { keep: boolean; max: number };
   autostart: boolean;
@@ -74,7 +74,8 @@ export interface Snapshot {
   lang: 'de' | 'en';
   stt: Record<string, ProviderInfo>;
   llm: Record<string, ProviderInfo>;
-  hotkeys: { toggle: boolean; cancel: boolean };
+  hotkeys: { toggle: boolean; cancel: boolean; command?: boolean };
+  hold: { key: string; label: string; active: boolean; keys: string[] };
   permissions: { mic: string; accessibility: boolean };
   dark: boolean;
 }
@@ -84,7 +85,7 @@ export interface HistoryItem {
   text: string;
   raw?: string;
   app?: string;
-  mode: Mode;
+  mode: Mode | 'command';
   seconds: number;
 }
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? (T[K] extends unknown[] ? T[K] : DeepPartial<T[K]>) : T[K] };

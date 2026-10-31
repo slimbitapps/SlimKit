@@ -36,6 +36,7 @@ public static class SVInput {
     for (int n = 0; n < 60; n++) { bool down = false; foreach (int vk in mods) if ((GetAsyncKeyState(vk) & 0x8000) != 0) down = true; if (!down) return; Thread.Sleep(25); }
   }
   public static void Paste() { WaitModifiers(); Send(new List<INPUT> { Key(0x11, 0, 0), Key(0x56, 0, 0), Key(0x56, 0, KEYUP), Key(0x11, 0, KEYUP) }); }
+  public static void Copy() { WaitModifiers(); Send(new List<INPUT> { Key(0x11, 0, 0), Key(0x43, 0, 0), Key(0x43, 0, KEYUP), Key(0x11, 0, KEYUP) }); }
   public static void Type(string s) {
     WaitModifiers();
     var l = new List<INPUT>();
@@ -61,6 +62,7 @@ while ($true) {
     if ($parts.Length -gt 1) { $arg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[1])) }
     switch ($parts[0]) {
       'paste' { [SVInput]::Paste(); [Console]::Out.WriteLine('OK') }
+      'copy'  { [SVInput]::Copy(); [Console]::Out.WriteLine('OK') }
       'type'  { [SVInput]::Type($arg); [Console]::Out.WriteLine('OK') }
       'fg'    { [Console]::Out.WriteLine('OK ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([SVInput]::Foreground()))) }
       default { [Console]::Out.WriteLine('ERR unknown') }
@@ -227,6 +229,33 @@ class Inserter {
       else this.clipboard.clear();
     } catch {
       /* egal */
+    }
+  }
+
+  /**
+   * Markierten Text der App im Vordergrund holen (Strg+C / ⌘C simulieren).
+   * Die Zwischenablage wird danach wiederhergestellt. Leerer String = nichts markiert.
+   */
+  async copySelection() {
+    if (this.testFile) return process.env.SLIMVOICE_SELECTION || '';
+    const saved = this.#saveClipboard();
+    const marker = `\u200b slimvoice ${Date.now()} \u200b`;
+    this.clipboard.writeText(marker);
+    try {
+      if (this.platform === 'win32') await this.win.send('copy');
+      else if (this.platform === 'darwin') await run('osascript', ['-e', 'tell application "System Events" to keystroke "c" using command down']);
+      else await run('xdotool', ['key', '--clearmodifiers', 'ctrl+c']);
+      let text = '';
+      for (let i = 0; i < 8; i++) {
+        await sleep(50);
+        text = this.clipboard.readText();
+        if (text !== marker) break;
+      }
+      return text === marker ? '' : text;
+    } catch {
+      return '';
+    } finally {
+      if (saved) this.#restoreClipboard(saved);
     }
   }
 

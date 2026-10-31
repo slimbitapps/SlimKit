@@ -11,7 +11,8 @@ const DEFAULTS = {
   version: 1,
   onboarded: false,
   ui: { lang: '', theme: 'system' },
-  hotkey: { toggle: 'CommandOrControl+Shift+Space', cancel: '' },
+  /** hold: Taste zum Halten (auto = rechte Strg bzw. rechte ⌘) · command: Befehlsmodus für markierten Text */
+  hotkey: { toggle: 'CommandOrControl+Shift+Space', cancel: '', hold: 'auto', command: 'Alt+Shift+Space' },
   dictation: {
     /** live = nach jeder Sprechpause einfügen · preview = Live-Vorschau, am Ende in bester Qualität einfügen · batch = erst aufnehmen, dann Text */
     mode: 'preview',
@@ -49,7 +50,7 @@ const DEFAULTS = {
     stt: { provider: 'local', model: '', fastModel: '', baseUrl: '' },
     llm: { provider: 'auto', model: '', baseUrl: '' },
     /** Lokale Spracherkennung: base | small | turbo · Gerät: auto | gpu | cpu · ready: fertig geladene Modelle */
-    local: { model: 'small', device: 'auto', ready: {} },
+    local: { model: 'small', device: 'auto', ready: {}, keepLoadedMin: 15 },
   },
   history: { keep: true, max: 200 },
   autostart: false,

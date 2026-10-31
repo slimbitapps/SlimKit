@@ -343,3 +343,95 @@ test('Profil überschreibt Stil und Stufe', () => {
   assert.equal(s2.ai.style, 'formal');
   assert.equal(s2.ai.level, 'light');
 });
+
+// ------------------------------------------------------------------ Taste halten / tippen
+const { KeyHoldMachine } = require('../electron/core/keyhook.cjs');
+function machine() {
+  let t = 0;
+  const timers = [];
+  const log = [];
+  let recording = false;
+  const m = new KeyHoldMachine({
+    holdMs: 200,
+    now: () => t,
+    setTimer: (fn, ms) => {
+      const tm = { at: t + ms, fn };
+      timers.push(tm);
+      return tm;
+    },
+    clearTimer: (tm) => timers.splice(timers.indexOf(tm), 1),
+    isRecording: () => recording,
+    onStart: (how) => {
+      recording = true;
+      log.push('start:' + how);
+    },
+    onStop: () => {
+      recording = false;
+      log.push('stop');
+    },
+    onAbort: () => {
+      recording = false;
+      log.push('abort');
+    },
+  });
+  m.setKey(3613);
+  const advance = (ms) => {
+    t += ms;
+    for (const tm of [...timers]) if (tm.at <= t) (timers.splice(timers.indexOf(tm), 1), tm.fn());
+  };
+  return { m, log, advance };
+}
+
+test('Taste halten = Push-to-talk', () => {
+  const { m, log, advance } = machine();
+  m.keydown(3613);
+  advance(100);
+  m.keydown(3613); // Wiederholung
+  advance(800);
+  m.keyup(3613);
+  assert.deepEqual(log, ['start:hold', 'stop']);
+});
+
+test('Kurz tippen = freihändig, nochmal tippen = Ende', () => {
+  const { m, log, advance } = machine();
+  m.keydown(3613);
+  advance(80);
+  m.keyup(3613);
+  advance(3000);
+  m.keydown(30); // normales Tippen während des Diktats stört nicht
+  m.keyup(30);
+  m.keydown(3613);
+  advance(60);
+  m.keyup(3613);
+  assert.deepEqual(log, ['start:tap', 'stop']);
+});
+
+test('Tastenkombination (rechte Strg + C) startet kein Diktat', () => {
+  const { m, log, advance } = machine();
+  m.keydown(3613);
+  advance(50);
+  m.keydown(46);
+  advance(500);
+  m.keyup(46);
+  m.keyup(3613);
+  assert.deepEqual(log, []);
+});
+
+test('Lokal + „Erst aufnehmen“: rechnet schon während der Aufnahme, am Ende keine zweite Runde', async () => {
+  const { s, inserted, calls } = makeSession('batch', { stt: async () => 'eins zwei', ai: { level: 'off' }, models: { sttPreview: 'm', sttMain: 'm', pipeline: true } });
+  s.addSegment(0, pcm());
+  s.addSegment(1, pcm());
+  await tick();
+  assert.equal(calls.stt.length, 2, 'während der Aufnahme umgewandelt');
+  await s.finish();
+  assert.equal(calls.stt.length, 2, 'am Ende nichts mehr');
+  assert.deepEqual(inserted, ['Eins zwei eins zwei ']);
+});
+
+test('Befehlsmodus: Anweisung + Markierung', () => {
+  const p = prompts.buildCommand({ instruction: 'übersetze ins Englische', selection: 'Hallo Welt' });
+  assert.match(p.user, /<selected_text>\nHallo Welt\n<\/selected_text>/);
+  assert.match(p.system, /replaces the selection/);
+  const q = prompts.buildCommand({ instruction: 'schreib eine Absage' });
+  assert.match(q.system, /Nothing is selected/);
+});

@@ -54,7 +54,8 @@ class DictationSession {
   addSegment(idx, pcm) {
     if (this.cancelled) return;
     this.chunks[idx] = pcm;
-    if (this.mode === 'batch') return;
+    // „Erst aufnehmen“: nichts verschicken – außer lokal, da rechnen wir still schon mit (spart Wartezeit am Ende)
+    if (this.mode === 'batch' && !this.models.pipeline) return;
     const job = this.mode === 'live' ? this.#live(idx, pcm) : this.#preview(idx, pcm);
     this.pending.add(job);
     job.finally(() => this.pending.delete(job));
@@ -170,7 +171,7 @@ class DictationSession {
     if (!chunks.length || this.cancelled) return { text: '', raw: '' };
 
     let raw = '';
-    const canReuse = this.mode === 'preview' && this.models.sttPreview === this.models.sttMain;
+    const canReuse = (this.mode === 'preview' || this.models.pipeline) && this.models.sttPreview === this.models.sttMain;
     if (canReuse) {
       await Promise.allSettled([...this.pending]);
       if (!this.failedPreview) raw = this.#previewText();
