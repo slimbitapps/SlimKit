@@ -51,13 +51,17 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    env:
+      # Wichtig: Das Rust-cmake-Werkzeug entfernt bei Visual Studio sonst /O2 → whisper.cpp ohne Optimierung (≈ 40x langsamer)
+      CMAKE_C_FLAGS_RELEASE: /MD /O2 /Ob2 /DNDEBUG
+      CMAKE_CXX_FLAGS_RELEASE: /MD /O2 /Ob2 /DNDEBUG /utf-8 /EHsc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: slimvoice/src-tauri, prefix-key: portable-v1 }
+        with: { workspaces: slimvoice/src-tauri, prefix-key: portable-v2 }
       - run: npm ci
       - run: npm test
       - run: npx tauri build --bundles nsis
