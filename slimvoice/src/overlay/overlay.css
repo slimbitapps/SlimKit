@@ -1,0 +1,228 @@
+/* Schwebende Anzeige während des Diktats – immer dunkel, damit sie auf jedem Hintergrund lesbar ist */
+:root {
+  --bg: rgba(22, 23, 27, 0.94);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f1f2f4;
+  --text-2: #a4a8b1;
+  --accent: #5b7cfa;
+  --rec: #ff5c63;
+  --ok: #33c37a;
+  --warn: #f6b03c;
+  color-scheme: dark;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.top {
+  align-items: flex-start;
+}
+body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 8px;
+  box-sizing: border-box;
+}
+#pill {
+  width: 100%;
+  max-width: 444px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  padding: 8px 8px 8px 10px;
+  box-sizing: border-box;
+  backdrop-filter: blur(16px);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.mic {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 92, 99, 0.16);
+  position: relative;
+}
+.mic > * {
+  grid-area: 1 / 1;
+}
+.bars {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  height: 16px;
+}
+.bars i {
+  display: block;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--rec);
+  transform: scaleY(0.12);
+  transition: transform 70ms linear;
+}
+#pill:not(.speaking) .bars i {
+  opacity: 0.75;
+}
+.spinner,
+.check,
+.warn {
+  display: none;
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(91, 124, 250, 0.3);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.check,
+.warn {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.check {
+  stroke: var(--ok);
+}
+.warn {
+  stroke: var(--warn);
+}
+[data-state='processing'] .mic {
+  background: rgba(91, 124, 250, 0.16);
+}
+[data-state='processing'] .bars,
+[data-state='done'] .bars,
+[data-state='empty'] .bars,
+[data-state='error'] .bars {
+  display: none;
+}
+[data-state='processing'] .spinner {
+  display: block;
+}
+[data-state='done'] .mic {
+  background: rgba(51, 195, 122, 0.16);
+}
+[data-state='done'] .check {
+  display: block;
+}
+[data-state='error'] .mic,
+[data-state='empty'] .mic {
+  background: rgba(246, 176, 60, 0.16);
+}
+[data-state='error'] .warn,
+[data-state='empty'] .warn {
+  display: block;
+}
+.status {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-state='error'] .status {
+  white-space: normal;
+  font-weight: 500;
+}
+.timer {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+[data-state='done'] .timer,
+[data-state='error'] .timer,
+[data-state='empty'] .timer {
+  display: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  cursor: pointer;
+}
+button[hidden] {
+  display: none;
+}
+.btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn.primary:hover {
+  background: #6f8cff;
+}
+.icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+.icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--text-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  fill: none;
+}
+.preview {
+  margin-top: 6px;
+  max-height: 58px;
+  overflow: hidden;
+  color: var(--text);
+  opacity: 0.88;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+[data-state='listening'] .preview,
+[data-state='processing'] .preview {
+  color: var(--text-2);
+}
+.note {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+[data-state='error'] .note {
+  color: var(--warn);
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SlimVoice</title>
+  </head>
+  <body>
+    <div id="pill" data-state="listening">
+      <div class="row">
+        <div class="mic" aria-hidden="true">
+          <div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="spinner"></div>
+          <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
+          <svg class="warn" viewBox="0 0 24 24"><path d="M12 7v6M12 16.5v.5" /></svg>
+        </div>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div class="timer" id="timer"></div>
+        <button id="settings" class="btn" hidden></button>
+        <button id="stop" class="btn primary"></button>
+        <button id="cancel" class="icon" hidden>
+          <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" /></svg>
+        </button>
+      </div>
+      <div class="preview" id="preview" hidden></div>
+      <div class="note" id="note" hidden></div>
+    </div>
+    <script type="module" src="/src/overlay/main.ts"></script>
+  </body>
+</html>

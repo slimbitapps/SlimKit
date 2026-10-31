@@ -1,0 +1,122 @@
+{
+  "name": "slimvoice",
+  "version": "0.1.0",
+  "description": "Better dictation for every app on Windows & Mac – speak, and clean text appears where your cursor is",
+  "main": "electron/main.cjs",
+  "private": true,
+  "author": "SlimBit Apps",
+  "license": "UNLICENSED",
+  "productName": "SlimVoice",
+  "scripts": {
+    "start": "vite build && electron .",
+    "build": "vite build && node scripts/bundle-main.cjs",
+    "typecheck": "tsc -p .",
+    "test": "node --test test/*.test.cjs",
+    "test:e2e": "vite build && node test/e2e/run.cjs",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "icons": "node scripts/make-icons.cjs"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.10.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  },
+  "build": {
+    "appId": "app.slimbit.slimvoice",
+    "productName": "SlimVoice",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "!**/*.map",
+      "!node_modules/**"
+    ],
+    "extraMetadata": {
+      "main": "dist/main.cjs"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SlimVoice",
+      "installerLanguages": [
+        "de_DE",
+        "en_US"
+      ],
+      "multiLanguageInstaller": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "SlimVoice-Setup.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SlimVoice listens only while you dictate and turns your speech into text.",
+        "NSAppleEventsUsageDescription": "SlimVoice inserts your dictated text into the app you are typing in.",
+        "LSUIElement": true
+      },
+      "artifactName": "SlimVoice-Mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "SlimVoice",
+      "contents": [
+        {
+          "x": 150,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 430,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "compression": "maximum",
+    "electronLanguages": [
+      "de",
+      "en",
+      "en-US",
+      "en-GB"
+    ]
+  }
+}
