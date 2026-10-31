@@ -10,7 +10,7 @@ const KEEP_TAIL_FRAMES: usize = 6; // ~190 ms Stille am Ende behalten
 const MIN_VOICED_MS: f32 = 200.0;
 const MAX_SEGMENT_MS: f32 = 28_000.0;
 /// Abschnitte, die insgesamt leiser sind, sind kein Sprechen (Rauschen, Klicken)
-const MIN_SEGMENT_RMS: f32 = 0.004;
+const MIN_SEGMENT_RMS: f32 = 0.0025;
 
 pub enum VadEvent {
     Level { level: f32, speaking: bool },
@@ -64,7 +64,8 @@ impl Segmenter {
 
     fn threshold(&self) -> f32 {
         let factor = 4.0 - self.sensitivity * 2.6;
-        let floor = 0.014 - self.sensitivity * 0.011;
+        // niedrige Untergrenze, damit auch Flüstern erkannt wird (Rauschen hebt die Schwelle automatisch)
+        let floor = 0.010 - self.sensitivity * 0.008;
         (self.noise * factor).max(floor)
     }
 

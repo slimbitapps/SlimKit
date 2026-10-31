@@ -24,6 +24,8 @@ fn is_filler(w: &str) -> bool {
 
 #[derive(Default)]
 pub struct Agreement {
+    /// so viele letzte Wörter warten immer (oft noch unfertig, Satzzeichen kommen später)
+    pub holdback: usize,
     committed: usize,
     /// schon eingetippte Wörter (für den Abgleich am Satzende)
     typed: Vec<String>,
@@ -41,11 +43,16 @@ impl Agreement {
         self.committed
     }
 
+    /// Noch unsichere Wörter der letzten Erkennung (nur zur Anzeige)
+    pub fn tentative(&self) -> String {
+        self.prev.get(self.committed..).map(|w| w.join(" ")).unwrap_or_default()
+    }
+
     /// Zwischenergebnis: gibt die Wörter zurück, die jetzt sicher sind und noch nicht getippt wurden
     pub fn partial(&mut self, hyp: &[String]) -> Vec<String> {
         let lcp = self.prev.iter().zip(hyp.iter()).take_while(|(a, b)| norm(a) == norm(b)).count();
         // das letzte Wort nie sofort – es ist oft noch abgeschnitten
-        let stable = lcp.min(hyp.len().saturating_sub(1));
+        let stable = lcp.min(hyp.len().saturating_sub(self.holdback.max(1)));
         let new = if stable > self.committed { hyp[self.committed..stable].to_vec() } else { Vec::new() };
         self.committed = self.committed.max(stable);
         self.typed.extend(new.iter().cloned());
@@ -94,6 +101,8 @@ pub struct Streamer {
     pub inserted: String,
     /// Zusammenhang = Text VOR dem aktuellen Satz (sonst lässt Whisper die schon getippten Wörter weg)
     ctx: String,
+    /// so viel neues Audio, bevor wieder erkannt wird (passt sich dem Tempo des Rechners an)
+    step: usize,
     pub remove_fillers: bool,
     pub replacements: Vec<Replacement>,
 }
@@ -103,14 +112,14 @@ pub type Recognize<'a> = dyn FnMut(&[i16], bool, &str) -> Result<String, String>
 /// Eintippen eines Stücks Text
 pub type Type<'a> = dyn FnMut(&str) + 'a;
 
-/// Mindestens so viel neues Audio, bevor wieder erkannt wird (0,5 s)
-const STEP: usize = 8_000;
-/// Erst ab 1 s Sprache die erste Zwischen-Erkennung
-const MIN_AUDIO: usize = 16_000;
+/// Mindestens so viel neues Audio, bevor wieder erkannt wird (0,3 s)
+const STEP: usize = 4_800;
+/// Erst ab 0,7 s Sprache die erste Zwischen-Erkennung
+const MIN_AUDIO: usize = 11_200;
 
 impl Streamer {
     pub fn new(remove_fillers: bool, replacements: Vec<Replacement>) -> Self {
-        Self { agreement: Agreement::default(), buf: Vec::new(), last_len: 0, inserted: String::new(), ctx: String::new(), remove_fillers, replacements }
+        Self { agreement: Agreement::default(), buf: Vec::new(), last_len: 0, inserted: String::new(), ctx: String::new(), step: STEP, remove_fillers, replacements }
     }
 
     fn context(&self) -> String {
@@ -155,29 +164,56 @@ impl Streamer {
 
     /// Wenn genug neues Audio da ist: Zwischen-Erkennung und sichere Wörter eintippen
     pub fn tick(&mut self, rec: &mut Recognize, typer: &mut Type) {
-        if self.buf.len() < MIN_AUDIO || self.buf.len() < self.last_len + STEP {
+        if self.buf.len() < MIN_AUDIO || self.buf.len() < self.last_len + self.step {
             return;
         }
         self.last_len = self.buf.len();
         let ctx = self.context();
-        let Ok(text) = rec(&self.buf, false, &ctx) else { return };
-        if is_hallucination(&text) {
+        let t0 = std::time::Instant::now();
+        let r = rec(&self.buf, false, &ctx);
+        // höchstens halb so oft rechnen, wie eine Erkennung dauert → Rechner bleibt ruhig
+        self.step = STEP.max((t0.elapsed().as_secs_f32() * 16_000.0) as usize);
+        let Ok(text) = r else { return };
+        self.apply_partial(&text, typer);
+    }
+
+    /// Zwischenergebnis (von Whisper oder Apple) → sichere Wörter eintippen
+    pub fn apply_partial(&mut self, text: &str, typer: &mut Type) {
+        if is_hallucination(text) {
             return;
         }
-        let new = self.agreement.partial(&words(&text));
+        let new = self.agreement.partial(&words(text));
         self.emit(new, typer);
+    }
+
+    /// Endergebnis eines Satzes → Rest eintippen
+    pub fn apply_final(&mut self, text: &str, typer: &mut Type) {
+        let text = if is_hallucination(text) { "" } else { text };
+        let rest = self.agreement.finish(&words(text));
+        self.emit(rest, typer);
+        self.buf.clear();
+        self.last_len = 0;
+        self.snapshot_ctx();
+    }
+
+    /// Unsichere Wörter für die Anzeige
+    pub fn tentative(&self) -> String {
+        self.agreement.tentative()
+    }
+
+    /// Satzanfang ohne Audio-Puffer (Apple erkennt selbst laufend)
+    pub fn begin(&mut self) {
+        self.buf.clear();
+        self.last_len = 0;
+        self.agreement.reset();
+        self.snapshot_ctx();
     }
 
     /// Satzende (Sprechpause): ganzen Satz gründlich erkennen und den Rest eintippen
     pub fn on_segment(&mut self, pcm: &[i16], rec: &mut Recognize, typer: &mut Type) {
         let ctx = self.context();
         let text = rec(pcm, true, &ctx).unwrap_or_default();
-        let text = if is_hallucination(&text) { String::new() } else { text };
-        let rest = self.agreement.finish(&words(&text));
-        self.emit(rest, typer);
-        self.buf.clear();
-        self.last_len = 0;
-        self.snapshot_ctx();
+        self.apply_final(&text, typer);
     }
 
     pub fn on_discard(&mut self) {

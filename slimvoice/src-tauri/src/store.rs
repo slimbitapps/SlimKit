@@ -33,7 +33,8 @@ pub fn defaults() -> Value {
             "customInstruction": "", "vocabulary": [], "replacements": [], "profiles": [], "useContext": true
         },
         "services": {
-            "stt": { "provider": "local", "model": "", "fastModel": "", "baseUrl": "" },
+            // Mac: Apples eingebaute Erkennung (schnell, kein Download) – sonst whisper.cpp
+            "stt": { "provider": if cfg!(target_os = "macos") { "apple" } else { "local" }, "model": "", "fastModel": "", "baseUrl": "" },
             "llm": { "provider": "auto", "model": "", "baseUrl": "" },
             "local": { "model": "small", "ready": {}, "keepLoadedMin": 15, "gpu": false }
         },

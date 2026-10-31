@@ -234,6 +234,17 @@ impl Session {
         (self.deps.emit)(json!({ "type": "preview", "text": g.inserted.trim() }));
     }
 
+    /// Anzeige: sicherer Text + noch unsichere Wörter (wie beim Mac-Diktat, das erst rät und dann korrigiert)
+    pub fn show_tentative(&self, tail: &str) {
+        let g = self.inner.lock().unwrap();
+        let base = g.inserted.trim().to_string();
+        drop(g);
+        if tail.is_empty() {
+            return;
+        }
+        (self.deps.emit)(json!({ "type": "preview", "text": base, "tentative": tail }));
+    }
+
     /// Bisher eingefügter Text (Zusammenhang für die Erkennung)
     pub fn inserted(&self) -> String {
         self.inner.lock().unwrap().inserted.clone()

@@ -89,6 +89,8 @@ export interface Snapshot {
   llm: Record<string, ProviderInfo>;
   hotkeys: { toggle: boolean; cancel: boolean; command?: boolean };
   permissions: { mic: string; accessibility: boolean };
+  /** Apples Spracherkennung (nur Mac). status: 0 nicht gefragt, 1 abgelehnt, 2 eingeschränkt, 3 erlaubt · available: 0 nein, 1 nur online, 2 auf dem Mac */
+  apple: { status: number; available: number } | null;
 }
 export interface HistoryItem {
   id: string;

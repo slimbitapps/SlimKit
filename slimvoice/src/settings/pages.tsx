@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Cards, Keys, Row, Section, Segmented, Select, TextField, Toggle, HotkeyInput, useApp } from './ui';
 import { LANGUAGES, type Key } from './i18n';
 import { LLM_PROVIDERS, GUIDES, LOCAL_TEXT } from './guides';
-import { LocalModels, ProviderPicker, ProviderSetup, SourceChoice, llmProvider, sttReady, useL } from './setup';
+import { AppleSetup, LocalModels, ProviderPicker, ProviderSetup, SourceChoice, llmProvider, sttReady, useL } from './setup';
 import type { HistoryItem, Level, Mode, Profile, Tempo } from './types';
 import logo from '../assets/logo.png';
 
@@ -107,8 +107,10 @@ function Wizard() {
 
       {step === 1 && (
         <>
-          <h2 className="step-title">{local ? L('Sprachmodell herunterladen', 'Download a speech model') : L('Online-Dienst einrichten', 'Set up an online service')}</h2>
-          {local ? (
+          <h2 className="step-title">{s.services.stt.provider === 'apple' ? L('Apple-Spracherkennung einrichten', 'Set up Apple speech recognition') : local ? L('Sprachmodell herunterladen', 'Download a speech model') : L('Online-Dienst einrichten', 'Set up an online service')}</h2>
+          {s.services.stt.provider === 'apple' ? (
+            <AppleSetup />
+          ) : local ? (
             <LocalModels compact />
           ) : (
             <>
@@ -116,7 +118,7 @@ function Wizard() {
               <ProviderSetup kind="stt" provider={s.services.stt.provider} />
             </>
           )}
-          {!ready && <p className="hint">{local ? L('Sobald ein Modell heruntergeladen ist, geht es weiter.', 'Continue once a model is downloaded.') : L('Sobald der Schlüssel gespeichert ist, geht es weiter.', 'Continue once the key is saved.')}</p>}
+          {!ready && s.services.stt.provider !== 'apple' && <p className="hint">{local ? L('Sobald ein Modell heruntergeladen ist, geht es weiter.', 'Continue once a model is downloaded.') : L('Sobald der Schlüssel gespeichert ist, geht es weiter.', 'Continue once the key is saved.')}</p>}
         </>
       )}
 
@@ -229,7 +231,7 @@ function Overview() {
   const ready = sttReady(snap);
   const llm = llmProvider(snap);
   const local = svc.stt.provider === 'local';
-  const sttName = local ? `${L('Auf diesem Computer', 'On this computer')} · ${LOCAL_TEXT[lang][svc.local.model]?.name}` : svc.stt.provider === 'custom' ? t('svc.custom') : GUIDES[lang][svc.stt.provider]?.name || svc.stt.provider;
+  const sttName = svc.stt.provider === 'apple' ? L('Apple-Spracherkennung', 'Apple speech recognition') : local ? `${L('Auf diesem Computer', 'On this computer')} · ${LOCAL_TEXT[lang][svc.local.model]?.name}` : svc.stt.provider === 'custom' ? t('svc.custom') : GUIDES[lang][svc.stt.provider]?.name || svc.stt.provider;
   const levelName = { off: L('Aus', 'Off'), punct: L('Nur Satzzeichen', 'Punctuation only'), light: L('Leicht', 'Light'), strong: L('Stark', 'Strong') }[s.ai.level];
   return (
     <div className="page">
@@ -238,7 +240,7 @@ function Overview() {
           <span className={'dot-state ' + (ready ? 'ok' : 'bad')} />
           <span className="label">{L('Spracherkennung', 'Speech recognition')}</span>
           <strong>{sttName}</strong>
-          {!ready && <span className="hint error">{local ? L('Modell noch nicht heruntergeladen', 'Model not downloaded yet') : L('Schlüssel fehlt', 'Key missing')}</span>}
+          {!ready && <span className="hint error">{svc.stt.provider === 'apple' ? L('Noch nicht eingerichtet', 'Not set up yet') : local ? L('Modell noch nicht heruntergeladen', 'Model not downloaded yet') : L('Schlüssel fehlt', 'Key missing')}</span>}
         </button>
         <button className="status-card" onClick={() => nav('ai')}>
           <span className={'dot-state ' + (s.ai.level === 'off' ? 'off' : llm ? 'ok' : 'bad')} />
@@ -384,7 +386,7 @@ export function Dictation() {
             ['batch', t('dict.mode.batch'), t('dict.mode.batch.d')],
           ]}
         />
-        {s.services.stt.provider !== 'local' && d.mode === 'stream' && (
+        {s.services.stt.provider !== 'local' && s.services.stt.provider !== 'apple' && d.mode === 'stream' && (
           <p className="hint">{L('„Wort für Wort“ geht nur mit der Erkennung auf deinem Computer. Mit einem Online-Dienst wird stattdessen jeder Satz nach einer Sprechpause eingefügt.', '“Word by word” only works with recognition on your computer. With an online service, each sentence is inserted after a pause instead.')}</p>
         )}
         {d.mode === 'stream' && d.insert === 'copy' && (
@@ -708,6 +710,7 @@ export function Services() {
   const stt = s.services.stt;
   const llm = s.services.llm;
   const local = stt.provider === 'local';
+  const apple = stt.provider === 'apple';
   const custom = stt.provider === 'custom';
   const tempo = s.dictation.tempo;
   const [expert, setExpert] = useState(custom || !!(stt.model || stt.fastModel || stt.baseUrl || llm.model || llm.baseUrl || llm.provider === 'custom'));
@@ -723,7 +726,8 @@ export function Services() {
         <div className="pad">
           <SourceChoice />
           {local && <LocalModels />}
-          {!local && !custom && (
+          {apple && <AppleSetup />}
+          {!local && !custom && !apple && (
             <>
               <ProviderPicker kind="stt" value={stt.provider} onChange={(provider) => set({ services: { stt: { provider, model: '', fastModel: '', baseUrl: '' } } })} />
               <ProviderSetup kind="stt" provider={stt.provider} />

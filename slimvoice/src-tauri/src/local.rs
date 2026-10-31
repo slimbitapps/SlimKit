@@ -193,11 +193,19 @@ impl Engine {
     /// Schutz gegen Hänger: begrenzte Länge der Ausgabe, keine Wiederholungs-Versuche, harte Zeitgrenze.
     pub fn transcribe(&self, key: &str, gpu: bool, pcm: &[i16], language: &str, prompt: &str, best: bool) -> Result<Transcript, SvError> {
         let t0 = std::time::Instant::now();
-        let audio: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
+        let mut audio: Vec<f32> = pcm.iter().map(|&s| s as f32 / 32768.0).collect();
         // fast nur Stille → gar nicht erst rechnen (verhindert erfundene Sätze)
         let rms = (audio.iter().map(|v| v * v).sum::<f32>() / audio.len().max(1) as f32).sqrt();
-        if audio.len() < 3200 || rms < 0.002 {
+        if audio.len() < 3200 || rms < 0.0008 {
             return Ok(Transcript { text: String::new(), ms: 0, gpu });
+        }
+        // Leise/geflüsterte Sprache lauter machen (wie eine automatische Mikrofon-Verstärkung)
+        let peak = audio.iter().fold(0.0f32, |m, v| m.max(v.abs())).max(1e-4);
+        let gain = (0.06 / rms).min(0.95 / peak).clamp(1.0, 10.0);
+        if gain > 1.05 {
+            for v in audio.iter_mut() {
+                *v *= gain;
+            }
         }
         let secs = audio.len() as f32 / 16_000.0;
         // Whisper braucht mindestens ~1 s – kurze Abschnitte mit Stille auffüllen

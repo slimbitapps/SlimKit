@@ -234,3 +234,9 @@ button[hidden] {
 #pill.command .bars i {
   background: #a06eff;
 }
+
+/* noch unsichere Wörter („Wort für Wort“) */
+.preview .tentative {
+  opacity: 0.5;
+  font-style: italic;
+}

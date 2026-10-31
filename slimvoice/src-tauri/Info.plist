@@ -4,6 +4,8 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>SlimVoice listens only while you dictate and turns your speech into text.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>SlimVoice uses Apple's on-device speech recognition to turn your speech into text – fast and offline.</string>
   <key>NSAppleEventsUsageDescription</key>
   <string>SlimVoice inserts your dictated text into the app you are typing in.</string>
   <key>LSUIElement</key>

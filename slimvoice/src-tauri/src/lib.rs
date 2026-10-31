@@ -9,6 +9,7 @@ pub mod local;
 pub mod prompts;
 pub mod providers;
 pub mod session;
+pub mod apple;
 pub mod stream;
 pub mod store;
 pub mod text;
@@ -180,6 +181,19 @@ fn resolve(cfg: &Value) -> Resolved {
             }
         })
         .unwrap_or_default();
+    if stt == "apple" {
+        return Resolved {
+            stt_provider: "apple".into(),
+            models: session::Models {
+                stt_main: "apple".into(),
+                stt_preview: "apple".into(),
+                max_seconds: 1800,
+                llm_model,
+                pipeline: false,
+            },
+            llm_provider,
+        };
+    }
     if stt == "local" || providers::stt_info(&stt).is_none() {
         let key = local::model(&cfg.s("/services/local/model"))
             .key
@@ -216,6 +230,12 @@ fn resolve(cfg: &Value) -> Resolved {
         },
         llm_provider,
     }
+}
+
+/// Sprache für Apple („“ = Systemsprache)
+fn apple_lang(cfg: &Value) -> String {
+    let l = cfg.s("/dictation/language");
+    if l == "auto" { String::new() } else { l }
 }
 
 fn local_ready(cfg: &Value) -> bool {
@@ -612,7 +632,8 @@ pub struct StartOpts {
 /// „Wort für Wort“ braucht lokale Erkennung und das Eintippen per Tastatur; sonst nächstbester Modus.
 fn effective_mode(cfg: &Value, stt_provider: &str, command: bool) -> String {
     let mode = cfg.s("/dictation/mode");
-    let local = stt_provider == "local";
+    // Erkennung auf dem Gerät (whisper.cpp oder Apple)
+    let local = stt_provider == "local" || stt_provider == "apple";
     let can_type = cfg.s("/dictation/insert") != "copy" && accessibility_ok();
     if command {
         "batch".into()
@@ -689,6 +710,13 @@ pub fn start_dictation(o: StartOpts) {
     if res.stt_provider == "local" {
         if !local_ready(&cfg) {
             return error_and_reset(id, json!({ "code": "local_missing" }));
+        }
+    } else if res.stt_provider == "apple" {
+        if apple::status() != 3 {
+            return error_and_reset(id, json!({ "code": "apple_permission" }));
+        }
+        if apple::available(&apple_lang(&cfg)) < 2 {
+            return error_and_reset(id, json!({ "code": "apple_offline_missing" }));
         }
     } else if !providers::stt_info(&res.stt_provider)
         .map(|i| i.key_optional)
@@ -829,6 +857,7 @@ pub fn start_dictation(o: StartOpts) {
         }
         // Audio-Ereignisse weiterreichen (Pegel → Anzeige, Abschnitte → Diktat)
         let stream_cfg = cfg.clone();
+        let stt_provider_stream = stt_provider.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let mut idx = 0;
             let mut errored = false;
@@ -837,7 +866,8 @@ pub fn start_dictation(o: StartOpts) {
                 let (stx, srx) = std::sync::mpsc::channel::<audio::AudioMsg>();
                 let s2 = sess.clone();
                 let c2 = stream_cfg.clone();
-                (Some(stx), Some(std::thread::spawn(move || stream_worker(s2, c2, srx))))
+                let apple = stt_provider_stream == "apple";
+                (Some(stx), Some(std::thread::spawn(move || if apple { apple_stream_worker(s2, c2, srx) } else { stream_worker(s2, c2, srx) })))
             } else {
                 (None, None)
             };
@@ -934,26 +964,9 @@ fn stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::R
             }
         }
     };
-    // Solange das Kürzel gedrückt gehalten wird, warten (sonst würden ⌥/Strg die Buchstaben verändern)
     let mut pending = String::new();
-    let s_ty = sess.clone();
-    let flush = move |pending: &mut String, force: bool| {
-        if pending.is_empty() || s_ty.cancelled.load(Ordering::SeqCst) {
-            pending.clear();
-            return;
-        }
-        if !force && st().hold.lock().unwrap().is_down() {
-            return;
-        }
-        let text = std::mem::take(pending);
-        if let Err(e) = st().inserter.insert(&text, "type", false) {
-            log(format!("stream insert: {e}"));
-            if let Ok(mut cb) = arboard::Clipboard::new() {
-                let _ = cb.set_text(text);
-            }
-            overlay_event(json!({ "id": s_ty.id, "type": "warning", "code": "insert_failed" }));
-        }
-    };
+    let s_fl = sess.clone();
+    let flush = move |pending: &mut String, force: bool| stream_flush(&s_fl, pending, force);
     let s_note = sess.clone();
     let handle = |m: audio::AudioMsg, streamer: &mut stream::Streamer, pending: &mut String, tick: &mut bool, rec: &mut stream::Recognize| {
         let mut ty = |piece: &str| {
@@ -995,6 +1008,7 @@ fn stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::R
                 pending.push_str(piece);
             };
             streamer.tick(&mut rec, &mut ty);
+            sess.show_tentative(&streamer.tentative());
         }
         flush(&mut pending, false);
     }
@@ -1006,6 +1020,111 @@ fn stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::R
         pending.push(' ');
     }
     flush(&mut pending, true);
+}
+
+/// „Wort für Wort“ mit Apples Erkennung: Apple liefert selbst laufend Zwischenergebnisse (ca. alle 0,1 s)
+fn apple_stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::Receiver<audio::AudioMsg>) {
+    let lang = apple_lang(&cfg);
+    let hints = sess.cfg.ai.vocabulary.clone();
+    let mut streamer = stream::Streamer::new(sess.cfg.ai.remove_fillers, sess.cfg.ai.replacements.clone());
+    // Apple setzt Satzzeichen erst etwas später → die letzten 2 Wörter warten
+    streamer.agreement.holdback = 2;
+    let mut pending = String::new();
+    let mut cur: Option<apple::Session> = None;
+    let flush = |pending: &mut String, force: bool| stream_flush(&sess, pending, force);
+    while let Ok(first) = rx.recv() {
+        let mut batch = vec![first];
+        while let Ok(m) = rx.try_recv() {
+            batch.push(m);
+        }
+        for m in batch {
+            let mut ty = |piece: &str| {
+                sess.note_inserted(piece);
+                *st().last_text.lock().unwrap() = sess.inserted().trim().to_string();
+                pending.push_str(piece);
+            };
+            match m {
+                audio::AudioMsg::Start(p) => {
+                    streamer.begin();
+                    cur = match apple::Session::start(&lang, &hints) {
+                        Ok(a) => Some(a),
+                        Err(e) => {
+                            log(format!("apple start: {e}"));
+                            overlay_event(json!({ "id": sess.id, "type": "error", "code": "apple_offline_missing" }));
+                            None
+                        }
+                    };
+                    if let Some(a) = &cur {
+                        a.feed(&p);
+                    }
+                }
+                audio::AudioMsg::Frame(p) => {
+                    if let Some(a) = &cur {
+                        a.feed(&p);
+                    }
+                }
+                audio::AudioMsg::Segment(_) => {
+                    if let Some(a) = cur.take() {
+                        let t0 = Instant::now();
+                        match a.finish(Duration::from_secs(8)) {
+                            Ok(text) => {
+                                log(format!("apple final {} ms: {text}", t0.elapsed().as_millis()));
+                                streamer.apply_final(&text, &mut ty);
+                            }
+                            Err(e) => {
+                                log(format!("apple final: {e}"));
+                                let t = streamer.tentative();
+                                streamer.apply_final(&t, &mut ty);
+                            }
+                        }
+                    }
+                }
+                audio::AudioMsg::Discard => {
+                    cur = None;
+                    streamer.begin();
+                }
+                _ => {}
+            }
+        }
+        if let Some(a) = &cur {
+            if let Some(text) = a.latest_partial() {
+                let mut ty = |piece: &str| {
+                    sess.note_inserted(piece);
+                    *st().last_text.lock().unwrap() = sess.inserted().trim().to_string();
+                    pending.push_str(piece);
+                };
+                streamer.apply_partial(&text, &mut ty);
+                sess.show_tentative(&streamer.tentative());
+            }
+        }
+        flush(&mut pending, false);
+    }
+    std::thread::sleep(Duration::from_millis(120));
+    let all = sess.inserted();
+    if sess.cfg.trailing_space && !all.trim().is_empty() && !all.ends_with(char::is_whitespace) {
+        sess.note_inserted(" ");
+        pending.push(' ');
+    }
+    flush(&mut pending, true);
+}
+
+/// Getippte Stücke wirklich einfügen – solange das Kürzel gedrückt ist, warten (⌥/Strg würden Buchstaben verändern)
+fn stream_flush(sess: &session::Session, pending: &mut String, force: bool) {
+    if pending.is_empty() || sess.cancelled.load(Ordering::SeqCst) {
+        pending.clear();
+        return;
+    }
+    if !force && st().hold.lock().unwrap().is_down() {
+        return;
+    }
+    let text = std::mem::take(pending);
+    if let Err(e) = st().inserter.insert(&text, "type", false) {
+        log(format!("stream insert: {e}"));
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_text(text);
+        }
+        overlay_event(json!({ "id": sess.id, "type": "warning", "code": "insert_failed" }));
+    }
 }
 
 fn make_deps(
@@ -1031,15 +1150,25 @@ fn make_deps(
     let llm_key = s.secrets.lock().unwrap().get(&llm_provider);
     let llm_model = models.llm_model.clone();
     let method = method.to_string();
+    let vocabulary = cfg.list("/ai/vocabulary");
     session::Deps {
         transcribe: Arc::new(move |pcm, model, prompt| {
-            let (p, lang, base, key) = (
+            let (p, lang, base, key, vocab) = (
                 stt_provider.clone(),
                 language.clone(),
                 base.clone(),
                 stt_key.clone(),
+                vocabulary.clone(),
             );
             Box::pin(async move {
+                if p == "apple" {
+                    let hints = vocab.clone();
+                    let l = if lang == "auto" { String::new() } else { lang.clone() };
+                    return tauri::async_runtime::spawn_blocking(move || apple::transcribe(&pcm, &l, &hints))
+                        .await
+                        .map_err(|e| providers::SvError::new("apple", e.to_string()))?
+                        .map_err(|e| providers::SvError::new(if e.starts_with("apple_") { &e } else { "apple" }, e.clone()));
+                }
                 if p == "local" {
                     let eng = st().engine.clone();
                     let lang2 = lang.clone();
@@ -1435,6 +1564,11 @@ fn snapshot() -> Value {
             "loaded": s.engine.loaded().map(|(k, g)| json!({ "model": k, "gpu": g })),
         },
         "permissions": { "accessibility": accessibility_ok(), "mic": "unknown" },
+        "apple": if cfg!(target_os = "macos") {
+            json!({ "status": apple::status(), "available": apple::available(&apple_lang(&settings)) })
+        } else {
+            Value::Null
+        },
         "recording": s.rec.lock().unwrap().recording,
         "website": WEBSITE,
         "email": "SlimBitApps@gmail.com",
@@ -1547,6 +1681,24 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
                 );
             }
             json!({ "accessibility": accessibility_ok() })
+        }
+        "apple:request" => {
+            // Systemdialog „Spracherkennung erlauben?“ (blockiert → eigener Thread)
+            let st_now = apple::status();
+            if st_now == 0 {
+                std::thread::spawn(|| {
+                    apple::request();
+                    let _ = st().handle.emit_to("main", "perm:changed", ());
+                });
+            } else if st_now == 1 {
+                open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition");
+            }
+            json!({ "status": st_now })
+        }
+        "apple:openDictation" => {
+            // Hier lädt macOS die Sprache für die Erkennung auf dem Gerät („Diktierfunktion“)
+            open_url("x-apple.systempreferences:com.apple.Keyboard-Settings.extension");
+            Value::Null
         }
         "app:restart" => {
             s.handle.restart();
@@ -1675,7 +1827,15 @@ async fn service_test(kind: &str, provider: &str) -> Value {
     let r = resolve(&cfg);
     let t0 = Instant::now();
     let res: Result<(), providers::SvError> = async {
-        if kind == "stt" && r.stt_provider == "local" {
+        if kind == "stt" && r.stt_provider == "apple" {
+            if apple::status() != 3 {
+                return Err(providers::SvError::new("apple_permission", "not allowed"));
+            }
+            if apple::available(&apple_lang(&cfg)) < 2 {
+                return Err(providers::SvError::new("apple_offline_missing", "not installed"));
+            }
+            Ok(())
+        } else if kind == "stt" && r.stt_provider == "local" {
             if !local_ready(&cfg) {
                 return Err(providers::SvError::new("local_missing", "not downloaded"));
             }
@@ -1780,7 +1940,9 @@ pub fn cli_selftest(model: &str) -> i32 {
     let st = eng.transcribe(key, false, &silence, "de", "", false).map(|t| t.text).unwrap_or_default();
     ok &= st.is_empty();
     let system = whisper_rs::print_system_info().to_string();
-    println!("{}", json!({ "ok": ok, "model": key, "cores": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0), "system": system, "results": results, "silence": st }));
+    // Apple-Brücke prüfen (nur Abfragen, die keinen Dialog öffnen)
+    let apple_info = if cfg!(target_os = "macos") { json!({ "status": apple::status(), "de": apple::available("de"), "en": apple::available("en") }) } else { Value::Null };
+    println!("{}", json!({ "ok": ok, "model": key, "cores": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0), "system": system, "results": results, "silence": st, "apple": apple_info }));
     if ok {
         0
     } else {

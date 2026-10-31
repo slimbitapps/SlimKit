@@ -1082,3 +1082,10 @@ span.error {
   margin: 2px 0;
   color: var(--text-2);
 }
+
+.apple-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}

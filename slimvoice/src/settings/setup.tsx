@@ -16,15 +16,32 @@ const fmtMB = (bytes: number) => (bytes / 1024 / 1024 >= 1000 ? `${(bytes / 1024
 
 // ------------------------------------------------------------------ Quelle wählen
 export function SourceChoice() {
-  const { s, set } = useApp();
+  const { s, set, snap } = useApp();
   const L = useL();
   const local = s.services.stt.provider === 'local';
+  const apple = s.services.stt.provider === 'apple';
+  const mac = snap.platform === 'darwin';
   const pick = (provider: string) => {
     if (provider === s.services.stt.provider) return;
     set({ services: { stt: { provider, model: '', fastModel: '', baseUrl: '' } } });
   };
   return (
-    <div className="source-cards" role="radiogroup" aria-label={L('Spracherkennung', 'Speech recognition')}>
+    <div className={'source-cards' + (mac ? ' three' : '')} role="radiogroup" aria-label={L('Spracherkennung', 'Speech recognition')}>
+      {mac && (
+        <button type="button" role="radio" aria-checked={apple} className={'source' + (apple ? ' on' : '')} onClick={() => pick('apple')}>
+          <span className="source-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zm-7 9h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.92V21h-2v-3.08A7 7 0 0 1 5 11z" />
+            </svg>
+          </span>
+          <strong>{L('Apple-Spracherkennung', 'Apple speech recognition')}</strong>
+          <span>{L('Dieselbe Erkennung wie das Mac-Diktat: Wörter in unter einer Sekunde, versteht sogar Flüstern. Kein Download.', 'The same engine as Mac dictation: words in under a second, even understands whispering. No download.')}</span>
+          <span className="tags">
+            <em>{L('Empfohlen', 'Recommended')}</em>
+            <em>{L('Auf dem Mac, offline', 'On your Mac, offline')}</em>
+          </span>
+        </button>
+      )}
       <button type="button" role="radio" aria-checked={local} className={'source' + (local ? ' on' : '')} onClick={() => pick('local')}>
         <span className="source-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
@@ -38,7 +55,7 @@ export function SourceChoice() {
           <em>{L('Nichts verlässt den Rechner', 'Nothing leaves your computer')}</em>
         </span>
       </button>
-      <button type="button" role="radio" aria-checked={!local} className={'source' + (!local ? ' on' : '')} onClick={() => pick(STT_PROVIDERS.includes(s.services.stt.provider) ? s.services.stt.provider : 'groq')}>
+      <button type="button" role="radio" aria-checked={!local && !apple} className={'source' + (!local && !apple ? ' on' : '')} onClick={() => pick(STT_PROVIDERS.includes(s.services.stt.provider) ? s.services.stt.provider : 'groq')}>
         <span className="source-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 5 5 0 0 1 18 18.98V19z" />
@@ -394,9 +411,74 @@ export function ProviderSetup({ kind, provider }: { kind: 'stt' | 'llm'; provide
   );
 }
 
+// ------------------------------------------------------------------ Apple-Spracherkennung (Mac)
+export function AppleSetup() {
+  const { snap, refresh } = useApp();
+  const L = useL();
+  const a = snap.apple;
+  // während der Systemdialog offen ist, regelmäßig nachsehen
+  useEffect(() => {
+    if (!a || (a.status === 3 && a.available === 2)) return;
+    const id = window.setInterval(() => refresh(), 1500);
+    return () => clearInterval(id);
+  }, [a?.status, a?.available]);
+  if (!a) return null;
+  const allowed = a.status === 3;
+  const offline = a.available === 2;
+  return (
+    <div className="apple-setup">
+      <ol className="steps">
+        <li className={allowed ? 'done' : ''}>
+          <span className="num">{allowed ? '✓' : '1'}</span>
+          <div className="step-body">
+            <div>
+              <strong>{L('Spracherkennung erlauben', 'Allow speech recognition')}</strong>
+              <p className="hint">
+                {allowed
+                  ? L('Erlaubt', 'Allowed')
+                  : a.status === 1
+                    ? L('Du hast es abgelehnt. Klick auf den Knopf und schalte in den Systemeinstellungen bei „SlimVoice“ den Schalter ein.', 'You declined. Click the button and turn on the switch next to “SlimVoice” in System Settings.')
+                    : L('Klick auf den Knopf und dann im Fenster von macOS auf „Erlauben“.', 'Click the button, then “Allow” in the macOS window.')}
+              </p>
+            </div>
+            {!allowed && (
+              <button className="btn primary" onClick={() => window.api.call('apple:request').then(() => refresh())}>
+                {a.status === 1 ? L('Systemeinstellungen öffnen', 'Open System Settings') : L('Erlauben', 'Allow')}
+              </button>
+            )}
+          </div>
+        </li>
+        <li className={offline ? 'done' : ''}>
+          <span className="num">{offline ? '✓' : '2'}</span>
+          <div className="step-body">
+            <div>
+              <strong>{L('Sprache auf dem Mac', 'Language on your Mac')}</strong>
+              <p className="hint">
+                {offline
+                  ? L('Bereit – die Erkennung läuft direkt auf deinem Mac.', 'Ready – recognition runs right on your Mac.')
+                  : L(
+                      'macOS muss die Sprache einmal laden. Klick auf den Knopf und schalte bei „Diktierfunktion“ den Schalter ein (Sprache wählen). macOS lädt sie dann im Hintergrund – das dauert ein paar Minuten.',
+                      'macOS needs to download the language once. Click the button and turn on “Dictation” (pick your language). macOS then downloads it in the background – this takes a few minutes.',
+                    )}
+              </p>
+            </div>
+            {!offline && (
+              <button className="btn" onClick={() => window.api.call('apple:openDictation')}>
+                {L('Tastatur-Einstellungen öffnen', 'Open Keyboard settings')}
+              </button>
+            )}
+          </div>
+        </li>
+      </ol>
+      {allowed && offline && <p className="hint">{L('Tipp: Unter „Diktat“ den Modus „Wort für Wort“ wählen – dann erscheinen die Wörter schon beim Sprechen.', 'Tip: choose “Word by word” under “Dictation” – words then appear while you speak.')}</p>}
+    </div>
+  );
+}
+
 /** Ist die Spracherkennung startklar? */
 export function sttReady(snap: ReturnType<typeof useApp>['snap']) {
   const svc = snap.settings.services;
+  if (svc.stt.provider === 'apple') return snap.apple?.status === 3 && snap.apple?.available === 2;
   if (svc.stt.provider === 'local') return !!snap.local.downloaded[svc.local.model];
   return !!snap.stt[svc.stt.provider]?.keyOptional || !!snap.secrets.keys[svc.stt.provider];
 }
@@ -406,6 +488,6 @@ export function llmProvider(snap: ReturnType<typeof useApp>['snap']) {
   const svc = snap.settings.services;
   const has = (p: string) => !!snap.secrets.keys[p] || !!snap.llm[p]?.keyOptional;
   if (svc.llm.provider && svc.llm.provider !== 'auto' && svc.llm.provider !== 'same') return has(svc.llm.provider) ? svc.llm.provider : '';
-  if (snap.llm[svc.stt.provider] && svc.stt.provider !== 'local' && has(svc.stt.provider)) return svc.stt.provider;
+  if (snap.llm[svc.stt.provider] && svc.stt.provider !== 'local' && svc.stt.provider !== 'apple' && has(svc.stt.provider)) return svc.stt.provider;
   return ['groq', 'openai', 'gemini', 'anthropic'].find(has) || '';
 }

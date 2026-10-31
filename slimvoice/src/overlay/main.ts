@@ -29,6 +29,9 @@ const TEXT: Record<Lang, Record<string, string>> = {
     'err.local_missing': 'Das Sprachmodell ist noch nicht heruntergeladen.',
     'err.local': 'Die lokale Spracherkennung hatte ein Problem.',
     'err.local_slow': 'Das dauert auf diesem Rechner zu lange – bitte unter „Spracherkennung“ ein kleineres Modell wählen.',
+    'err.apple_permission': 'Bitte erlaube SlimVoice die Spracherkennung (Einstellungen → Spracherkennung).',
+    'err.apple_offline_missing': 'Für diese Sprache fehlt Apples Erkennung auf dem Mac. Einstellungen → Spracherkennung → „Sprache laden“.',
+    'err.apple_timeout': 'Apples Spracherkennung hat nicht geantwortet. Bitte nochmal versuchen.',
     'setup': 'Einrichten',
     'warn.ai_no_key': 'KI-Korrektur übersprungen – kein Dienst eingerichtet.',
     'err.auth': 'Der Dienst lehnt den API-Schlüssel ab.',
@@ -69,6 +72,9 @@ const TEXT: Record<Lang, Record<string, string>> = {
     'err.local_missing': 'The speech model has not been downloaded yet.',
     'err.local': 'Local speech recognition ran into a problem.',
     'err.local_slow': 'This takes too long on this computer – please choose a smaller model under “Speech recognition”.',
+    'err.apple_permission': 'Please allow SlimVoice to use speech recognition (Settings → Speech recognition).',
+    'err.apple_offline_missing': 'Apple’s on-device recognition is missing for this language. Settings → Speech recognition → “Download language”.',
+    'err.apple_timeout': 'Apple speech recognition did not respond. Please try again.',
     'setup': 'Set up',
     'warn.ai_no_key': 'AI correction skipped – no service set up.',
     'err.auth': 'The service rejected the API key.',
@@ -120,9 +126,16 @@ function setState(state: string, text?: string) {
   btnSettings.hidden = state !== 'error';
   if (state !== 'listening') clearInterval(tick);
 }
-function setPreview(text: string) {
+/** Sicherer Text normal, noch unsichere Wörter blass dahinter (werden gleich bestätigt oder korrigiert) */
+function setPreview(text: string, tentative = '') {
   preview.textContent = text;
-  preview.hidden = !text;
+  if (tentative) {
+    const span = document.createElement('span');
+    span.className = 'tentative';
+    span.textContent = (text ? ' ' : '') + tentative;
+    preview.appendChild(span);
+  }
+  preview.hidden = !text && !tentative;
   preview.scrollTop = preview.scrollHeight;
 }
 function setNote(text: string) {
@@ -200,7 +213,7 @@ window.api.on('ui:event', (ev: any) => {
   if (ev.id !== undefined) current = ev.id;
   switch (ev.type) {
     case 'preview':
-      if (mode !== 'batch') setPreview(ev.text);
+      if (mode !== 'batch') setPreview(ev.text, ev.tentative || '');
       break;
     case 'command':
       setState('listening', t('cmd.' + ev.command));
@@ -223,8 +236,8 @@ window.api.on('ui:event', (ev: any) => {
       if (sounds) beep('error');
       const key = TEXT.en['err.' + ev.code] ? 'err.' + ev.code : 'err.error';
       setState('error', t(key, { provider: PROVIDERS[ev.provider] || ev.provider || '' }));
-      btnSettings.textContent = ['no_key', 'local_missing', 'no_llm', 'local_slow'].includes(ev.code) ? t('setup') : t('settings');
-      setNote(ev.message && !['no_key', 'local_missing', 'no_llm', 'mic', 'local_slow'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
+      btnSettings.textContent = ['no_key', 'local_missing', 'no_llm', 'local_slow', 'apple_permission', 'apple_offline_missing'].includes(ev.code) ? t('setup') : t('settings');
+      setNote(ev.message && !['no_key', 'local_missing', 'no_llm', 'mic', 'local_slow', 'apple_permission', 'apple_offline_missing', 'apple_timeout'].includes(ev.code) ? String(ev.message).slice(0, 160) : '');
       break;
     }
   }
