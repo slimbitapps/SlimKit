@@ -92,6 +92,8 @@ pub struct Streamer {
     last_len: usize,
     /// alles, was in diesem Diktat schon eingetippt wurde
     pub inserted: String,
+    /// Zusammenhang = Text VOR dem aktuellen Satz (sonst lässt Whisper die schon getippten Wörter weg)
+    ctx: String,
     pub remove_fillers: bool,
     pub replacements: Vec<Replacement>,
 }
@@ -108,12 +110,16 @@ const MIN_AUDIO: usize = 16_000;
 
 impl Streamer {
     pub fn new(remove_fillers: bool, replacements: Vec<Replacement>) -> Self {
-        Self { agreement: Agreement::default(), buf: Vec::new(), last_len: 0, inserted: String::new(), remove_fillers, replacements }
+        Self { agreement: Agreement::default(), buf: Vec::new(), last_len: 0, inserted: String::new(), ctx: String::new(), remove_fillers, replacements }
     }
 
     fn context(&self) -> String {
+        self.ctx.clone()
+    }
+
+    fn snapshot_ctx(&mut self) {
         let n = self.inserted.chars().count();
-        self.inserted.chars().skip(n.saturating_sub(120)).collect()
+        self.ctx = self.inserted.chars().skip(n.saturating_sub(120)).collect();
     }
 
     fn emit(&mut self, ws: Vec<String>, typer: &mut Type) {
@@ -134,6 +140,7 @@ impl Streamer {
         self.buf = pcm;
         self.last_len = 0;
         self.agreement.reset();
+        self.snapshot_ctx();
     }
 
     pub fn on_frame(&mut self, pcm: &[i16], rec: &mut Recognize, typer: &mut Type) {
@@ -170,6 +177,7 @@ impl Streamer {
         self.emit(rest, typer);
         self.buf.clear();
         self.last_len = 0;
+        self.snapshot_ctx();
     }
 
     pub fn on_discard(&mut self) {
@@ -221,7 +229,8 @@ mod tests {
         let mut typed: Vec<String> = Vec::new();
         let script = ["hallo äh das", "Hallo, äh, das ist", "Hallo, äh, das ist ein Test"];
         let mut i = 0;
-        let mut rec = |pcm: &[i16], thorough: bool, _: &str| -> Result<String, String> {
+        let mut rec = |pcm: &[i16], thorough: bool, ctx: &str| -> Result<String, String> {
+            assert!(ctx.is_empty(), "Zusammenhang darf den aktuellen Satz nicht enthalten: {ctx}");
             if thorough {
                 return Ok(format!("Hallo, das ist ein Test. ({})", pcm.len() / 16_000));
             }
