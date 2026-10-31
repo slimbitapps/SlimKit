@@ -921,7 +921,10 @@ fn stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::R
         }
         let hint = s_rec.stt_hint(ctx);
         match eng.transcribe(&key, gpu, pcm, &lang, &hint, thorough && thorough_beam) {
-            Ok(t) => Ok(t.text),
+            Ok(t) => {
+                log(format!("stream {} {:.1}s audio → {} ms: {}", if thorough { "final" } else { "partial" }, pcm.len() as f32 / 16000.0, t.ms, t.text));
+                Ok(t.text)
+            }
             Err(e) => {
                 log(format!("stream: {} {}", e.code, e.message));
                 if thorough {

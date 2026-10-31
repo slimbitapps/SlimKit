@@ -327,6 +327,8 @@ function startServer() {
           await ctl('/toggle');
           await sleep(3000);
           console.log(`  lokal (stream): erste Wörter nach ${first.toFixed(1)} s während der Aufnahme: „${during}“ → am Ende „${readOut().trim()}“`);
+          const alog = path.join(userData, 'app.log');
+          if (fs.existsSync(alog)) console.log(fs.readFileSync(alog, 'utf8').split('\n').filter((l) => /stream/.test(l)).join('\n'));
           assert.match(readOut(), /hello|test|dictation|works/i);
           assert.ok(readOut().startsWith(during), 'schon Getipptes darf nicht verändert werden');
           await sleep(1500);
