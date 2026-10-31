@@ -1,33 +1,43 @@
 'use strict';
 /**
- * Ende-zu-Ende-Test: startet die echte App mit einem simulierten Mikrofon (WAV-Datei mit zwei „Sätzen“
- * und Pausen dazwischen) und einem lokalen Test-Server statt OpenAI & Co.
- * Prüft: Sprechpausen-Erkennung → Abschnitte → Spracherkennung → KI → Einfügen, in allen drei Modi.
- * Macht dabei Screenshots der Oberfläche.
+ * Ende-zu-Ende-Test: startet die echte App (Tauri) mit simuliertem Mikrofon (WAV-Datei) und einem lokalen
+ * Test-Server statt OpenAI & Co. Gesteuert wird über die Test-Schnittstelle der App (nur mit SLIMVOICE_TEST).
+ * Prüft Sprechpausen → Abschnitte → Erkennung → KI → Einfügen in allen Modi, Befehlsmodus, Halten/Tippen,
+ * Wörter pro Programm, Verlauf. Macht Bildschirmfotos.
  *
- *   npm run test:e2e [screenshot-ordner]      (unter Linux ohne Bildschirm: xvfb-run -a npm run test:e2e)
+ *   xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e/run.cjs [screenshot-ordner]
+ *   LOCAL_MODEL=base → zusätzlich echte lokale Erkennung mit Download + eingebautem Selbsttest (braucht Internet)
  */
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const http = require('node:http');
 const assert = require('node:assert/strict');
-const { _electron: electron } = require('playwright-core');
+const { spawn, execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SHOTS = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'slimvoice-shots'));
 fs.mkdirSync(SHOTS, { recursive: true });
+const BIN = process.env.SLIMVOICE_BIN || path.join(ROOT, 'src-tauri', 'target', 'debug', process.platform === 'win32' ? 'slimvoice.exe' : 'slimvoice');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, ms = 15000, label = '') {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     if (await fn()) return;
-    await sleep(100);
+    await sleep(150);
   }
   throw new Error('Zeitüberschreitung: ' + label);
 }
+function shot(name) {
+  if (process.platform !== 'linux') return;
+  try {
+    execFileSync('import', ['-window', 'root', path.join(SHOTS, name + '.png')]);
+  } catch {
+    /* kein ImageMagick */
+  }
+}
 
-/** Simuliertes Mikrofon: Stille, „Sprache“ (moduliertes Rauschen + Ton), Stille, „Sprache“, lange Stille */
+/** Simuliertes Mikrofon: Stille, „Sprache“, Stille, „Sprache“, lange Stille (Chromium-unabhängig, 48 kHz) */
 function makeWav(file) {
   const rate = 48000;
   const parts = [
@@ -81,17 +91,17 @@ function startServer() {
     if (req.url === '/v1/audio/transcriptions') {
       const text = body.toString('latin1');
       const model = /name="model"\r\n\r\n([^\r]+)/.exec(text)?.[1];
+      const prompt = /name="prompt"\r\n\r\n([^\r]*)/.exec(text)?.[1] || '';
       const dataStart = text.indexOf('RIFF');
       const seconds = dataStart >= 0 ? (body.length - dataStart - 44) / 32000 : 0;
-      calls.stt.push({ model, seconds });
-      // 1 Abschnitt ≈ 1,5 s, beide zusammen > 2,5 s
+      calls.stt.push({ model, seconds, prompt });
       if (seconds > 2.6) return json({ text: 'hallo äh welt neuer absatz das ist ein test' });
       return json({ text: calls.stt.filter((c) => c.seconds <= 2.6).length % 2 ? 'hallo äh welt' : 'das ist ein test' });
     }
     if (req.url === '/v1/chat/completions') {
       const msg = JSON.parse(body.toString());
       const user = msg.messages[1].content;
-      calls.llm.push({ model: msg.model, user });
+      calls.llm.push({ model: msg.model, user, system: msg.messages[0].content });
       const dictation = /<dictation>\n([\s\S]*)\n<\/dictation>/.exec(user)?.[1];
       if (!dictation) {
         const instr = /<instruction>\n([\s\S]*)\n<\/instruction>/.exec(user)?.[1];
@@ -109,196 +119,187 @@ function startServer() {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'slimvoice-e2e-'));
   const wav = path.join(userData, 'mic.wav');
   const out = path.join(userData, 'out.txt');
+  const portFile = path.join(userData, 'port');
   makeWav(wav);
   const { srv, calls, url } = await startServer();
   fs.writeFileSync(
     path.join(userData, 'settings.json'),
     JSON.stringify({
       onboarded: true,
-      ui: { lang: 'de', theme: 'dark' },
+      ui: { lang: 'de', theme: 'dark', mode: 'expert' },
       dictation: { mode: 'preview', tempo: 'balanced', sounds: false, language: 'de' },
-      ai: { level: 'light', vocabulary: ['SlimBit'] },
+      ai: { level: 'light', vocabulary: ['SlimBit'], profiles: [{ match: 'outlook', style: 'formal', vocabulary: ['Rechnungsnummer'], replacements: [{ from: 'mfg', to: 'Mit freundlichen Grüßen' }] }] },
       services: { stt: { provider: 'custom', baseUrl: url, model: 'big-whisper', fastModel: 'small-whisper' }, llm: { provider: 'custom', baseUrl: url, model: 'local-llm' } },
     }),
   );
-
-  const app = await electron.launch({
-    executablePath: require('electron'),
-    args: [ROOT, '--no-sandbox', '--lang=de'],
-    env: { ...process.env, SLIMVOICE_TEST: '1', SLIMVOICE_USERDATA: userData, SLIMVOICE_OUTPUT: out, SLIMVOICE_FAKE_AUDIO: wav, SLIMVOICE_RAW_AUDIO: '1', SLIMVOICE_FG_APP: 'OUTLOOK', SLIMVOICE_SELECTION: 'Hey Leute' },
-  });
-  const errors = [];
-  const pageFor = async (name) => {
-    await waitFor(() => app.windows().some((w) => w.url().includes(name)), 15000, name);
-    const p = app.windows().find((w) => w.url().includes(name));
-    p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    p.on('console', (m) => m.type() === 'error' && errors.push(`${name} console: ${m.text()}`));
-    return p;
-  };
-  const settingsWin = await pageFor('index.html');
-  const overlay = await pageFor('overlay.html');
-  const sv = (fn, arg) => app.evaluate(fn, arg);
+  const env = { ...process.env, SLIMVOICE_TEST: '1', SLIMVOICE_USERDATA: userData, SLIMVOICE_OUTPUT: out, SLIMVOICE_FAKE_AUDIO: wav, SLIMVOICE_CONTROL_FILE: portFile, SLIMVOICE_FG_APP: 'OUTLOOK', SLIMVOICE_SELECTION: 'Hey Leute', LANG: 'de_DE.UTF-8' };
+  const app = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let appLog = '';
+  app.stdout.on('data', (d) => (appLog += d));
+  app.stderr.on('data', (d) => (appLog += d));
   const readOut = () => (fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '');
+  let base = '';
+  const ctl = async (p, body) => {
+    const r = await fetch(base + p, { method: body ? 'POST' : 'GET', body: body ? JSON.stringify(body) : undefined });
+    return r.json();
+  };
+  const dispatch = (ch, ...args) => ctl('/dispatch', { ch, args });
+  const recording = async () => (await ctl('/state')).recording;
 
   try {
-    // ---------------------------------------------------------------- Einrichtungs-Assistent (Screenshots)
-    await sv(({}) => globalThis.__slimvoice.settings.update({ onboarded: false }), {});
-    await settingsWin.reload();
-    await settingsWin.setViewportSize({ width: 940, height: 760 });
-    await settingsWin.waitForSelector('.wizard');
-    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-1.png') });
-    // lokal → Modelle
-    await settingsWin.getByRole('radio', { name: /Auf diesem Computer/ }).click();
-    await settingsWin.getByRole('button', { name: /Weiter/ }).click();
-    await settingsWin.waitForSelector('.model-cards');
-    await waitFor(async () => !(await settingsWin.locator('.machine').innerText()).includes('…'), 15000, 'Engine antwortet (GPU-Info)');
-    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-2-lokal.png') });
-    const engineWin = app.windows().find((w) => w.url().includes('engine.html'));
-    assert.ok(engineWin, 'Engine-Fenster läuft');
-    assert.match(engineWin.url(), /^slimvoice:\/\/app\//);
-    assert.equal(await engineWin.evaluate(() => self.crossOriginIsolated), true, 'mehrere Kerne möglich (cross-origin isolated)');
-    // online → Groq-Anleitung
-    await settingsWin.getByRole('button', { name: /Zurück/ }).click();
-    await settingsWin.getByRole('radio', { name: /Online-Dienst/ }).click();
-    await settingsWin.getByRole('button', { name: /Weiter/ }).click();
-    await settingsWin.waitForSelector('.guide-steps');
-    assert.match(await settingsWin.locator('.guide').innerText(), /Create API Key/);
-    assert.equal(await settingsWin.getByRole('button', { name: /Weiter/ }).isDisabled(), true, 'ohne Schlüssel nicht weiter');
-    await settingsWin.screenshot({ path: path.join(SHOTS, 'wizard-3-groq.png') });
-    // zurück auf den Test-Server stellen
-    await sv((_e, { url }) => globalThis.__slimvoice.settings.update({ onboarded: true, services: { stt: { provider: 'custom', baseUrl: url, model: 'big-whisper', fastModel: 'small-whisper' } } }), { url });
-    await settingsWin.reload();
-    console.log('✓ Einrichtungs-Assistent (lokal + Online mit Anleitung), Engine-Fenster isoliert');
-
-    // ---------------------------------------------------------------- Einstellungen: Seiten durchklicken
-    await settingsWin.setViewportSize({ width: 940, height: 680 });
-    await settingsWin.waitForSelector('.nav-item');
-    for (const [i, name] of ['start', 'diktat', 'ki', 'dienste', 'verlauf', 'allgemein'].entries()) {
-      await settingsWin.locator('.nav-item').nth(i).click();
-      await sleep(250);
-      await settingsWin.screenshot({ path: path.join(SHOTS, `settings-${i + 1}-${name}.png`) });
+    await waitFor(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').length > 0, 20000, 'App startet');
+    base = `http://127.0.0.1:${fs.readFileSync(portFile, 'utf8')}`;
+    await sleep(2500); // Fenster aufbauen lassen
+    shot('settings-1-start');
+    for (const page of ['dictation', 'words', 'ai', 'services', 'general']) {
+      await ctl('/nav', { page });
+      await sleep(700);
+      shot('settings-' + page);
     }
-    // Dienst testen (gegen den Test-Server)
-    await settingsWin.locator('.nav-item').nth(3).click();
-    await settingsWin.locator('.test-row button').first().click();
-    await settingsWin.waitForSelector('.test-row .badge.ok', { timeout: 10000 });
-    await settingsWin.locator('.test-row button').nth(1).click();
-    await waitFor(async () => (await settingsWin.locator('.test-row .badge.ok').count()) === 2, 10000, 'Verbindungstest KI');
+
+    // ---------------------------------------------------------------- Verbindungstest
+    const t1 = await dispatch('service:test', 'stt');
+    const t2 = await dispatch('service:test', 'llm');
+    assert.equal(t1.ok, true, JSON.stringify(t1));
+    assert.equal(t2.ok, true, JSON.stringify(t2));
     console.log('✓ Verbindungstest Spracherkennung + KI');
 
-    // Einstellung über die Oberfläche ändern → landet in settings.json
-    await settingsWin.locator('.nav-item').nth(2).click();
-    await settingsWin.getByRole('radio', { name: /Stark/ }).click();
-    await waitFor(() => JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')).ai.level === 'strong', 5000, 'KI-Stufe gespeichert');
-    await settingsWin.getByRole('radio', { name: /Leicht/ }).click();
-    console.log('✓ Einstellungen werden gespeichert');
-
-    // ---------------------------------------------------------------- Modus „Live-Vorschau“
-    calls.stt.length = 0;
-    calls.llm.length = 0;
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
+    // ---------------------------------------------------------------- Live-Vorschau
+    await ctl('/toggle');
     await waitFor(() => calls.stt.filter((c) => c.model === 'small-whisper').length >= 2, 20000, 'zwei Vorschau-Abschnitte');
-    await waitFor(async () => /Hallo welt/.test(await overlay.locator('#preview').innerText()), 5000, 'Vorschau im Overlay');
-    await overlay.screenshot({ path: path.join(SHOTS, 'overlay-1-listening.png') });
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
+    await sleep(300);
+    shot('overlay-1-listening');
+    await ctl('/toggle');
     await waitFor(() => readOut().length > 0, 15000, 'Text eingefügt (preview)');
-    await waitFor(async () => (await overlay.locator('#pill').getAttribute('data-state')) === 'done', 5000, 'Overlay fertig');
-    await overlay.screenshot({ path: path.join(SHOTS, 'overlay-2-done.png') });
-    const t1 = readOut();
-    console.log('  eingefügt:', JSON.stringify(t1));
-    assert.equal(t1, 'Hallo Welt\n\nDas ist ein Test. ');
-    const final = calls.stt.filter((c) => c.model === 'big-whisper');
+    await sleep(300);
+    shot('overlay-2-done');
+    const out1 = readOut();
+    console.log('  eingefügt:', JSON.stringify(out1));
+    assert.equal(out1, 'Hallo Welt\n\nDas ist ein Test. ');
+    const final = calls.stt.filter((c) => c.model === 'big-whisper' && c.seconds > 1);
     assert.equal(final.length, 1, 'eine Anfrage in bester Qualität');
-    assert.ok(final[0].seconds > 2.6 && final[0].seconds < 4.5, 'nur Sprache, keine lange Stille: ' + final[0].seconds);
-    assert.equal(calls.llm.length, 1);
-    assert.equal(calls.llm[0].model, 'local-llm');
-    console.log('✓ Modus Live-Vorschau: Abschnitte, Vorschau, beste Qualität, KI, Einfügen');
+    assert.ok(final[0].seconds > 2.6 && final[0].seconds < 4.6, 'nur Sprache, keine lange Stille: ' + final[0].seconds);
+    // App-Profil „outlook“: eigene Wörter gehen an Erkennung und KI, Stil förmlich
+    assert.match(final[0].prompt, /SlimBit, Rechnungsnummer/);
+    assert.match(calls.llm.at(-1).system, /business email/);
+    assert.match(calls.llm.at(-1).system, /Rechnungsnummer/);
+    console.log('✓ Live-Vorschau: Abschnitte, Vorschau, beste Qualität, KI, Einfügen, Wörter pro Programm');
 
-    // ---------------------------------------------------------------- Modus „Sofort einfügen“
+    // ---------------------------------------------------------------- Sofort einfügen, KI aus
     fs.writeFileSync(out, '');
     calls.stt.length = 0;
     calls.llm.length = 0;
-    await sv(({}) => globalThis.__slimvoice.settings.update({ dictation: { mode: 'live' }, ai: { level: 'off' } }), {});
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
+    await dispatch('settings:set', { dictation: { mode: 'live' }, ai: { level: 'off' } });
+    await ctl('/toggle');
     await waitFor(() => readOut().includes('ist ein test'), 20000, 'zwei Abschnitte live eingefügt');
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
+    await ctl('/toggle');
     await sleep(800);
-    const t2 = readOut();
-    console.log('  eingefügt:', JSON.stringify(t2));
-    assert.match(t2, /^Hallo welt das ist ein test /);
-    assert.ok(calls.stt.every((c) => c.model === 'big-whisper'));
-    assert.equal(calls.llm.length, 0, 'KI aus');
-    console.log('✓ Modus Sofort einfügen (Füllwörter weg, KI aus)');
-
-    // ---------------------------------------------------------------- Taste halten (Push-to-talk) – Hook simuliert
-    fs.writeFileSync(out, '');
-    await sv(() => globalThis.__slimvoice.holdMachine.keydown(3613));
-    await waitFor(() => sv(() => globalThis.__slimvoice.rec.state === 'recording'), 3000, 'Halten startet');
-    await sleep(4000);
-    await sv(() => globalThis.__slimvoice.holdMachine.keyup(3613));
-    await waitFor(() => readOut().length > 0, 15000, 'Loslassen fügt ein');
     console.log('  eingefügt:', JSON.stringify(readOut()));
-    // Tastenkombination (rechte Strg + C) darf nichts auslösen
-    await sv(() => (globalThis.__slimvoice.holdMachine.keydown(3613), globalThis.__slimvoice.holdMachine.keydown(46)));
-    await sleep(600);
-    assert.equal(await sv(() => globalThis.__slimvoice.rec.state), 'idle', 'Kombination startet nichts');
-    await sv(() => (globalThis.__slimvoice.holdMachine.keyup(46), globalThis.__slimvoice.holdMachine.keyup(3613)));
-    console.log('✓ Taste halten zum Sprechen, Tastenkombinationen werden ignoriert');
+    assert.match(readOut(), /^Hallo welt das ist ein test /);
+    assert.equal(calls.llm.length, 0, 'KI aus');
+    console.log('✓ Sofort einfügen (Füllwörter weg, KI aus)');
+
+    // ---------------------------------------------------------------- Halten = sprechen, tippen = freihändig
+    fs.writeFileSync(out, '');
+    await ctl('/hold/press');
+    await waitFor(recording, 3000, 'Halten startet');
+    await sleep(3500);
+    await ctl('/hold/release');
+    await waitFor(async () => !(await recording()), 3000, 'Loslassen beendet');
+    await waitFor(() => readOut().length > 0, 15000, 'Loslassen fügt ein');
+    fs.writeFileSync(out, '');
+    await ctl('/hold/press');
+    await sleep(120);
+    await ctl('/hold/release');
+    await sleep(800);
+    assert.equal(await recording(), true, 'kurz getippt → läuft freihändig weiter');
+    await ctl('/hold/press');
+    await ctl('/hold/release');
+    await waitFor(async () => !(await recording()), 3000, 'nochmal drücken beendet');
+    console.log('✓ Halten = sprechen, kurz tippen = freihändig');
 
     // ---------------------------------------------------------------- Befehlsmodus
+    await sleep(1500);
     fs.writeFileSync(out, '');
     calls.llm.length = 0;
-    await sv(() => globalThis.__slimvoice.toggleDictation({ command: true }));
-    await waitFor(async () => /Markierung/.test(await overlay.locator('#status').innerText()), 5000, 'Befehlsmodus-Anzeige');
-    await overlay.screenshot({ path: path.join(SHOTS, 'overlay-4-befehl.png') });
-    await sleep(4000);
-    await sv(() => globalThis.__slimvoice.toggleDictation());
+    await ctl('/command');
+    await sleep(3500);
+    shot('overlay-3-befehl');
+    await ctl('/command');
     await waitFor(() => readOut().length > 0, 15000, 'Befehl ausgeführt');
     console.log('  eingefügt:', JSON.stringify(readOut()));
-    assert.match(readOut(), /^\[.+\] Hey Leute$/, 'KI bekam Anweisung + Markierung');
+    assert.match(readOut(), /^\[.+\] Hey Leute$/);
     assert.match(calls.llm[0].user, /<selected_text>\nHey Leute/);
     console.log('✓ Befehlsmodus: Markierung + gesprochene Anweisung → KI → ersetzt');
 
-    // ---------------------------------------------------------------- Modus „Erst aufnehmen“ + Abbrechen
+    // ---------------------------------------------------------------- Erst aufnehmen + Abbrechen
+    await sleep(1500);
     fs.writeFileSync(out, '');
     calls.stt.length = 0;
-    await sv(({}) => globalThis.__slimvoice.settings.update({ dictation: { mode: 'batch' } }), {});
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
+    await dispatch('settings:set', { dictation: { mode: 'batch' } });
+    await ctl('/toggle');
     await sleep(2500);
     assert.equal(calls.stt.length, 0, 'batch: während der Aufnahme nichts verschickt');
-    await sv(({}) => globalThis.__slimvoice.cancelDictation(), {});
+    await ctl('/cancel');
     await sleep(1000);
-    assert.equal(readOut(), '', 'abgebrochen → nichts eingefügt');
+    assert.equal(readOut(), '');
     assert.equal(calls.stt.length, 0);
-    console.log('✓ Modus Erst aufnehmen: nichts verschickt; Abbrechen fügt nichts ein');
+    console.log('✓ Erst aufnehmen: nichts verschickt; Abbrechen fügt nichts ein');
 
-    // ---------------------------------------------------------------- Fehlender Schlüssel
-    await sv(({}) => globalThis.__slimvoice.settings.update({ services: { stt: { provider: 'openai' } } }), {});
-    await sv(({}) => globalThis.__slimvoice.toggleDictation(), {});
-    await waitFor(async () => (await overlay.locator('#pill').getAttribute('data-state')) === 'error', 5000, 'Fehleranzeige');
-    assert.match(await overlay.locator('#status').innerText(), /Kein API-Schlüssel für OpenAI/);
-    await overlay.screenshot({ path: path.join(SHOTS, 'overlay-3-error.png') });
-    console.log('✓ Fehlender Schlüssel wird verständlich angezeigt');
+    // ---------------------------------------------------------------- Fehlender Schlüssel / fehlendes Modell
+    await dispatch('settings:set', { services: { stt: { provider: 'openai' } } });
+    await ctl('/toggle');
+    await sleep(800);
+    shot('overlay-4-fehler');
+    assert.equal(await recording(), false);
+    await dispatch('settings:set', { services: { stt: { provider: 'local' } } });
+    const snap = await dispatch('app:snapshot');
+    assert.equal(Object.keys(snap.local.downloaded).length, 0);
+    console.log('✓ Fehlender Schlüssel / fehlendes Modell wird abgefangen');
 
-    // ---------------------------------------------------------------- Verlauf
-    const hist = await sv(({}) => globalThis.__slimvoice.history.items, {});
-    assert.ok(hist.length >= 2, 'Verlauf hat Einträge');
-    assert.equal(hist[hist.length - 1].app, 'OUTLOOK');
-    await settingsWin.locator('.nav-item').nth(4).click();
-    await settingsWin.waitForSelector('.hist-item');
-    await settingsWin.screenshot({ path: path.join(SHOTS, 'settings-5-verlauf.png') });
-    console.log('✓ Verlauf');
+    // ---------------------------------------------------------------- Verlauf + Einrichtungs-Assistent
+    const hist = await dispatch('history:list');
+    assert.ok(hist.length >= 3, 'Verlauf hat Einträge');
+    assert.ok(hist.some((h) => h.mode === 'command'));
+    assert.ok(hist.some((h) => h.app === 'OUTLOOK'));
+    await ctl('/nav', { page: 'history' });
+    await sleep(700);
+    shot('settings-history');
+    await dispatch('settings:set', { onboarded: false, wizardStep: 0, ui: { mode: 'simple' } });
+    await ctl('/nav', { page: 'welcome' });
+    await sleep(900);
+    shot('wizard-1');
+    await dispatch('settings:set', { wizardStep: 1 });
+    await sleep(900);
+    shot('wizard-2-lokal');
+    await dispatch('settings:set', { services: { stt: { provider: 'groq' } } });
+    await sleep(900);
+    shot('wizard-3-groq');
+    // Schritt bleibt gespeichert (vorher fing der Assistent immer von vorne an)
+    const s2 = await dispatch('app:snapshot');
+    assert.equal(s2.settings.wizardStep, 1);
+    console.log('✓ Verlauf, Einrichtungs-Assistent merkt sich den Schritt');
 
-    assert.deepEqual(errors, []);
+    // ---------------------------------------------------------------- Echte lokale Erkennung (nur mit Internet)
+    if (process.env.LOCAL_MODEL) {
+      console.log('… lokale Erkennung: Download', process.env.LOCAL_MODEL);
+      const t0 = Date.now();
+      const r = await dispatch('local:download', process.env.LOCAL_MODEL);
+      console.log('  Download + Selbsttest:', Math.round((Date.now() - t0) / 1000), 's', JSON.stringify(r));
+      assert.equal(r.ok, true);
+      assert.equal(r.test.ok, true, 'Selbsttest erkennt die Sprachprobe');
+      console.log('✓ Lokale Erkennung: Download + eingebauter Selbsttest');
+    }
+
     console.log(`\nAlles grün. Screenshots: ${SHOTS}`);
   } catch (e) {
     console.error('✗', e);
-    console.error('Fehler in den Fenstern:', errors);
     const log = path.join(userData, 'app.log');
-    if (fs.existsSync(log)) console.error(fs.readFileSync(log, 'utf8'));
+    if (fs.existsSync(log)) console.error('--- app.log\n' + fs.readFileSync(log, 'utf8'));
+    console.error('--- Ausgabe\n' + appLog.slice(-4000));
     process.exitCode = 1;
   } finally {
-    await app.close().catch(() => {});
+    app.kill();
     srv.close();
   }
 })();

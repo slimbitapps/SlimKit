@@ -109,14 +109,29 @@ const BLUE_A = [111, 140, 255], BLUE_B = [74, 105, 230];
 const RED_A = [255, 110, 116], RED_B = [229, 56, 63];
 const scaled = (f, s) => (x, y) => f(0.5 + (x - 0.5) / s, 0.5 + (y - 0.5) / s) * s;
 
+/** SlimBit-Logo-Schema: Verlauf, dahinter halbdurchsichtige Sprechblase, davor weißes Mikrofon + Schallwelle */
+const VIOLET = [139, 92, 246], BLUE = [59, 130, 246];
+function rotBox(x, y, cx, cy, hw, hh, r, deg) {
+  const a = (deg * Math.PI) / 180;
+  const dx = x - cx, dy = y - cy;
+  const rx = dx * Math.cos(a) + dy * Math.sin(a), ry = -dx * Math.sin(a) + dy * Math.cos(a);
+  const qx = Math.abs(rx) - (hw - r), qy = Math.abs(ry) - (hh - r);
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+}
+const moved = (f, s, ox, oy) => (x, y) => f(0.5 + (x - ox) / s, 0.5 + (y - oy) / s) * s;
 function appIcon(size) {
+  const micAt = moved(micDist, 0.56, 0.58, 0.55);
   return render(size, [
-    { dist: (x, y) => roundRect(x, y, 0.06, 0.2), color: (x, y) => [...lerp(BLUE_A, BLUE_B, (x + y) / 2), 255] },
-    { dist: scaled(micDist, 0.62), color: () => [255, 255, 255, 255] },
+    { dist: (x, y) => roundRect(x, y, 0.06, 0.2), color: (x, y) => [...lerp(VIOLET, BLUE, (x + y) / 2), 255] },
+    // Sprechblase hinten
+    { dist: (x, y) => Math.min(rotBox(x, y, 0.38, 0.38, 0.2, 0.15, 0.07, -10), Math.hypot(x - 0.27, y - 0.55) - 0.045), color: () => [255, 255, 255, 92] },
+    // Schallwelle rechts
+    { dist: (x, y) => (x < 0.72 ? 1 : Math.abs(Math.hypot(x - 0.58, y - 0.48) - 0.25) - 0.022), color: () => [255, 255, 255, 170] },
+    { dist: micAt, color: () => [255, 255, 255, 255] },
   ]);
 }
 function winTray(size, rec) {
-  const [a, b] = rec ? [RED_A, RED_B] : [BLUE_A, BLUE_B];
+  const [a, b] = rec ? [RED_A, RED_B] : [VIOLET, BLUE];
   return render(size, [
     { dist: (x, y) => Math.hypot(x - 0.5, y - 0.5) - 0.48, color: (x, y) => [...lerp(a, b, (x + y) / 2), 255] },
     { dist: scaled(micDist, 0.72), color: () => [255, 255, 255, 255] },
@@ -131,11 +146,10 @@ function macTray(size, rec) {
   return render(size, layers);
 }
 
-const tray = path.join(ROOT, 'electron', 'tray');
+const tray = path.join(ROOT, 'src-tauri', 'icons');
 fs.mkdirSync(tray, { recursive: true });
-fs.mkdirSync(path.join(ROOT, 'build'), { recursive: true });
-fs.writeFileSync(path.join(ROOT, 'build', 'icon.png'), appIcon(1024));
-fs.writeFileSync(path.join(ROOT, 'brand-icon-256.png'), appIcon(256));
+fs.writeFileSync(path.join(ROOT, 'src-tauri', 'icons', 'icon.png'), appIcon(1024));
+fs.writeFileSync(path.join(ROOT, 'src', 'assets', 'logo.png'), appIcon(256));
 fs.writeFileSync(path.join(tray, 'tray.png'), winTray(32, false));
 fs.writeFileSync(path.join(tray, 'tray-rec.png'), winTray(32, true));
 fs.writeFileSync(path.join(tray, 'trayTemplate.png'), macTray(16, false));

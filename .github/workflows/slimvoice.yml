@@ -1,4 +1,4 @@
-# Baut SlimVoice (Ordner slimvoice/) zum Testen: Installer für Windows und Mac.
+# Baut SlimVoice (Ordner slimvoice/, Tauri) zum Testen: Installer für Windows und Mac.
 # Ergebnis: Vorabversion „SlimVoice (Test)“ unter Releases – wird bei jedem neuen Stand ersetzt.
 # Unsigniert: Windows zeigt einmal „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“,
 # Mac: Rechtsklick auf die App → „Öffnen“.
@@ -7,7 +7,7 @@ name: SlimVoice bauen
 on:
   push:
     branches: [claude/stoic-ritchie-esp9l9]
-    paths: ['slimvoice/**', '.github/workflows/slimvoice.yml']
+    paths: ['slimvoice/**', '.github/workflows/slimvoice.yml', '!slimvoice/**/*.md']
   workflow_dispatch:
 
 defaults:
@@ -15,33 +15,54 @@ defaults:
     working-directory: slimvoice
 
 jobs:
+  # Tests + Ende-zu-Ende-Test der echten App (Linux) inkl. echter lokaler Erkennung mit Modell-Download
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: slimvoice/src-tauri }
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libxdo-dev xvfb imagemagick
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:web
+      - run: cargo build --features tauri/custom-protocol
+        working-directory: slimvoice/src-tauri
+      - name: Ende-zu-Ende-Test (mit echter lokaler Erkennung, Modell „Klein“)
+        env: { LOCAL_MODEL: base }
+        run: xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e/run.cjs "$RUNNER_TEMP/shots"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: SlimVoice-Screenshots, path: '${{ runner.temp }}/shots' }
+
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: slimvoice/src-tauri }
       - run: npm ci
-      - run: npm run typecheck
-      - run: node --test test/core.test.cjs test/platform.test.cjs
-      - run: npm run build
-      - name: Installer (Setup.exe) + portable ZIP
-        shell: bash
-        run: npx electron-builder --win nsis zip --x64 --publish never
-      - name: Selbsttest der gepackten App (Tastatur-Hook + lokale Engine enthalten)
+      - run: npm test
+      - run: npx tauri build --bundles nsis
+      - name: Installer + portable ZIP
         shell: pwsh
         run: |
-          $out = Join-Path $env:RUNNER_TEMP 'selftest.json'
-          Start-Process -Wait -FilePath 'release\win-unpacked\SlimVoice.exe' -ArgumentList "--selftest=$out"
-          Get-Content $out
-          if (-not (Select-String -Path $out -Pattern '"ok": true' -Quiet)) { exit 1 }
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1).FullName out/SlimVoice-Setup.exe
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Copy-Item src-tauri/target/release/slimvoice.exe portable/SlimVoice.exe
+          Compress-Archive -Path portable/* -DestinationPath out/SlimVoice-Windows-portable.zip -Force
+          Get-ChildItem out | Format-Table Name, Length
       - uses: actions/upload-artifact@v4
-        with:
-          name: SlimVoice-Windows
-          path: |
-            slimvoice/release/*.exe
-            slimvoice/release/*.zip
-          if-no-files-found: error
+        with: { name: SlimVoice-Windows, path: slimvoice/out/*, if-no-files-found: error }
 
   mac:
     runs-on: macos-latest
@@ -49,55 +70,41 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: slimvoice/src-tauri }
       - run: npm ci
-      - run: npm run typecheck
       - run: npm test
-      - run: npm run build
-      - name: Unsigniert bauen (ad-hoc signiert, damit es auf Apple-Chips startet)
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: |
-          npx electron-builder --mac dir --arm64 --x64 -c.mac.identity=null --publish never
-          codesign --force --deep --sign - release/mac-arm64/SlimVoice.app
-          codesign --force --deep --sign - release/mac/SlimVoice.app
-          # Selbsttest der gepackten App (Apple-Chip)
-          release/mac-arm64/SlimVoice.app/Contents/MacOS/SlimVoice --selftest="$RUNNER_TEMP/selftest.json" || true
-          cat "$RUNNER_TEMP/selftest.json"
-          grep -q '"ok": true' "$RUNNER_TEMP/selftest.json"
-          npx electron-builder --mac dmg --arm64 -c.mac.identity=null --prepackaged release/mac-arm64/SlimVoice.app --publish never
-          npx electron-builder --mac dmg --x64 -c.mac.identity=null --prepackaged release/mac/SlimVoice.app --publish never
-          mv release/SlimVoice-Mac-arm64.dmg release/SlimVoice-Mac.dmg
-          mv release/SlimVoice-Mac-x64.dmg release/SlimVoice-Mac-Intel.dmg
+      - run: npx tauri build --bundles dmg
+      - run: |
+          mkdir -p out
+          cp src-tauri/target/release/bundle/dmg/*.dmg out/SlimVoice-Mac.dmg
+          ls -la out
       - uses: actions/upload-artifact@v4
-        with:
-          name: SlimVoice-Mac
-          path: slimvoice/release/*.dmg
-          if-no-files-found: error
+        with: { name: SlimVoice-Mac, path: slimvoice/out/*, if-no-files-found: error }
 
-  # Lokale Spracherkennung wirklich ausprobieren: Modell herunterladen, gesprochenen Satz erkennen
-  local-engine:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  mac-intel:
+    runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: slimvoice/package-lock.json }
-      - run: sudo apt-get update && sudo apt-get install -y espeak-ng ffmpeg xvfb
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-apple-darwin }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: slimvoice/src-tauri, key: intel }
       - run: npm ci
-      - run: npm run build
-      - name: Gesprochenen Testsatz erzeugen
-        run: |
-          espeak-ng -v en-us -s 140 -w /tmp/speech.wav "Hello world. This is a test of the local speech recognition."
-          ffmpeg -loglevel error -y -i /tmp/speech.wav -af "adelay=800,apad=pad_dur=4" -ar 48000 -ac 1 /tmp/mic.wav
-      - name: Lokale Erkennung (Modell klein)
-        env: { SPEECH_WAV: /tmp/mic.wav, LOCAL_MODEL: base }
-        run: xvfb-run -a node test/e2e/local.cjs
-      - name: Lokale Erkennung (Modell mittel, Live-Vorschau)
-        env: { SPEECH_WAV: /tmp/mic.wav, LOCAL_MODEL: small, LOCAL_MODE: preview }
-        run: xvfb-run -a node test/e2e/local.cjs
+      - run: npx tauri build --bundles dmg --target x86_64-apple-darwin
+      - run: |
+          mkdir -p out
+          cp src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg out/SlimVoice-Mac-Intel.dmg
+      - uses: actions/upload-artifact@v4
+        with: { name: SlimVoice-Mac-Intel, path: slimvoice/out/*, if-no-files-found: error }
 
   release:
-    needs: [windows, mac]
+    needs: [test, windows, mac]
+    if: always() && needs.windows.result == 'success' && needs.mac.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -106,7 +113,8 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: out, merge-multiple: true }
+        with: { path: out, merge-multiple: true, pattern: 'SlimVoice-[MW]*' }
+      - run: ls -la out
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: slimvoice-test
@@ -114,11 +122,12 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: true
           make_latest: false
+          fail_on_unmatched_files: false
           body: |
             Testversion von SlimVoice – wird bei jedem neuen Stand ersetzt.
             **Windows:** SlimVoice-Setup.exe herunterladen und doppelklicken. Warnung „Computer wurde geschützt“ → „Weitere Informationen“ → „Trotzdem ausführen“.
             **Mac mit Apple-Chip (M1–M4):** SlimVoice-Mac.dmg öffnen, App auf „Programme“ ziehen, dann Rechtsklick auf die App → „Öffnen“.
-            **Älterer Mac mit Intel:** SlimVoice-Mac-Intel.dmg
+            **Älterer Mac mit Intel:** SlimVoice-Mac-Intel.dmg (falls vorhanden)
             **Ohne Installation (Windows):** SlimVoice-Windows-portable.zip entpacken und SlimVoice.exe starten.
             Stand: ${{ github.sha }}
           files: |

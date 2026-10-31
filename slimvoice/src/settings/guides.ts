@@ -160,17 +160,18 @@ export const LOCAL_TEXT: Record<Lang, Record<string, { name: string; desc: strin
   de: {
     base: { name: 'Klein', desc: 'Schnell, auch auf älteren Rechnern. Für kurze, deutliche Diktate.' },
     small: { name: 'Mittel', desc: 'Guter Kompromiss aus Genauigkeit und Tempo. Für die meisten Rechner.' },
-    turbo: { name: 'Groß', desc: 'Beste Genauigkeit – fast wie die Cloud. Braucht eine gute Grafikkarte oder Geduld.' },
+    turbo: { name: 'Groß', desc: 'Beste Genauigkeit – wie die Cloud. Auf Macs mit Apple-Chip sehr flott, auf älteren PCs langsamer.' },
   },
   en: {
     base: { name: 'Small', desc: 'Fast, even on older computers. For short, clear dictation.' },
     small: { name: 'Medium', desc: 'Good balance of accuracy and speed. For most computers.' },
-    turbo: { name: 'Large', desc: 'Best accuracy – almost like the cloud. Needs a good graphics card or patience.' },
+    turbo: { name: 'Large', desc: 'Best accuracy – like the cloud. Very quick on Macs with Apple chips, slower on older PCs.' },
   },
 };
 
-export function recommendLocal(ramGB: number, gpu: boolean) {
-  if (gpu && ramGB >= 16) return 'turbo';
-  if (ramGB >= 8) return 'small';
+/** Apple-Chip: „Groß“ läuft dank Metal flott. Sonst nach Prozessorkernen. */
+export function recommendLocal(cores: number, appleSilicon: boolean) {
+  if (appleSilicon) return 'turbo';
+  if (cores >= 6) return 'small';
   return 'base';
 }

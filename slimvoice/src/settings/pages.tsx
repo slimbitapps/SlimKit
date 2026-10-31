@@ -4,6 +4,7 @@ import { LANGUAGES, type Key } from './i18n';
 import { LLM_PROVIDERS, GUIDES, LOCAL_TEXT } from './guides';
 import { LocalModels, ProviderPicker, ProviderSetup, SourceChoice, llmProvider, sttReady, useL } from './setup';
 import type { HistoryItem, Level, Mode, Profile, Tempo } from './types';
+import logo from '../assets/logo.png';
 
 // ------------------------------------------------------------------ Start
 /** Einrichtungs-Assistent beim ersten Start, danach Übersicht + Testfeld */
@@ -44,7 +45,9 @@ function TryIt() {
 function Wizard() {
   const { s, snap, set, lang } = useApp();
   const L = useL();
-  const [step, setStep] = useState(0);
+  // Schritt wird gespeichert – wer zwischendurch woanders hinklickt, landet wieder an derselben Stelle
+  const step = Math.min(3, Math.max(0, s.wizardStep || 0));
+  const setStep = (n: number) => set({ wizardStep: n });
   const local = s.services.stt.provider === 'local';
   const ready = sttReady(snap);
   const llm = llmProvider(snap);
@@ -62,11 +65,11 @@ function Wizard() {
       )}
       <span className="spacer" />
       {step < 3 ? (
-        <button className="btn primary" disabled={step === 1 && !ready} onClick={() => setStep(step + 1)}>
+        <button className="btn primary" data-testid="wizard-next" disabled={step === 1 && !ready} onClick={() => setStep(step + 1)}>
           {L('Weiter', 'Next')} →
         </button>
       ) : (
-        <button className="btn primary" onClick={() => set({ onboarded: true })}>
+        <button className="btn primary" data-testid="wizard-done" onClick={() => set({ onboarded: true, wizardStep: 0 })}>
           {L('Fertig', 'Done')} ✓
         </button>
       )}
@@ -170,8 +173,8 @@ function Wizard() {
           <h2 className="step-title">{L('Ausprobieren', 'Try it')}</h2>
           {mac && (
             <Section title={L('Auf dem Mac braucht SlimVoice zwei Freigaben:', 'On the Mac, SlimVoice needs two permissions:')}>
-              <Perm label={L('Mikrofon', 'Microphone')} ok={snap.permissions.mic === 'granted'} what="mic" />
-              <Perm label={L('Bedienungshilfen (zum Einfügen)', 'Accessibility (to insert text)')} ok={snap.permissions.accessibility} what="accessibility" />
+              <AccessPerm />
+              <p className="hint">{L('Das Mikrofon fragt macOS beim ersten Diktat – dann auf „Erlauben“ klicken.', 'macOS asks for the microphone on the first dictation – click “Allow”.')}</p>
             </Section>
           )}
           <TryIt />
@@ -247,7 +250,7 @@ function Overview() {
           <span className="dot-state ok" />
           <span className="label">{L('Starten', 'Start')}</span>
           <strong>{s.hotkey.toggle ? <Keys accel={s.hotkey.toggle} /> : '—'}</strong>
-          {snap.hold.key && snap.hold.active && <span className="hint">{L('oder', 'or')} {snap.hold.label} {L('halten', 'hold')}</span>}
+          <span className="hint">{L('halten = sprechen · tippen = freihändig', 'hold = talk · tap = hands-free')}</span>
         </button>
       </div>
       <Stats />
@@ -255,7 +258,7 @@ function Overview() {
         <TryIt />
       </Section>
       <p className="hint center">
-        <button className="link" onClick={() => set({ onboarded: false })}>
+        <button className="link" onClick={() => set({ onboarded: false, wizardStep: 0 })}>
           {L('Einrichtungs-Assistent erneut starten', 'Run the setup assistant again')}
         </button>
       </p>
@@ -263,96 +266,79 @@ function Overview() {
   );
 }
 
-function Perm({ label, ok, what }: { label: string; ok: boolean; what: string }) {
-  const { t, refresh } = useApp();
+/** Mac-Freigabe „Bedienungshilfen“: Knopf + Schritt-für-Schritt-Hilfe. Der Status aktualisiert sich von selbst. */
+export function AccessPerm() {
+  const { snap } = useApp();
+  const L = useL();
+  const ok = snap.permissions.accessibility;
+  const [asked, setAsked] = useState(false);
   return (
-    <Row label={label}>
-      {ok ? (
-        <span className="badge ok">{t('perm.ok')}</span>
-      ) : (
-        <button
-          className="btn"
-          onClick={async () => {
-            await window.api.call('perm:request', what);
-            setTimeout(refresh, 1500);
-          }}
-        >
-          {t('perm.allow')}
-        </button>
+    <div className="perm">
+      <Row
+        label={L('Bedienungshilfen (zum Einfügen des Textes)', 'Accessibility (to insert the text)')}
+        hint={ok ? undefined : L('Ohne diese Freigabe kann SlimVoice den Text nur in die Zwischenablage legen.', 'Without it, SlimVoice can only put the text on the clipboard.')}
+      >
+        {ok ? (
+          <span className="badge ok">✓ {L('Freigegeben', 'Allowed')}</span>
+        ) : (
+          <button
+            className="btn primary"
+            onClick={async () => {
+              setAsked(true);
+              await window.api.call('perm:request', 'accessibility');
+            }}
+          >
+            {L('Freigeben …', 'Allow …')}
+          </button>
+        )}
+      </Row>
+      {!ok && asked && (
+        <ol className="guide-steps perm-steps">
+          <li>{L('Es öffnet sich „Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen“.', '“System Settings → Privacy & Security → Accessibility” opens.')}</li>
+          <li>{L('Schalte den Schalter bei „SlimVoice“ ein (ggf. mit Passwort/Touch ID bestätigen).', 'Turn on the switch next to “SlimVoice” (confirm with password/Touch ID if asked).')}</li>
+          <li>{L('Fertig – diese Anzeige wird von selbst grün, du musst nichts neu laden.', 'Done – this turns green by itself, no need to reload.')}</li>
+          <li>
+            <strong>{L('Steht SlimVoice schon in der Liste und ist eingeschaltet, aber hier bleibt es rot?', 'SlimVoice is already in the list and switched on, but this stays red?')}</strong>{' '}
+            {L(
+              'Das passiert nach einem Update der Testversion: SlimVoice in der Liste markieren, unten auf „–“ klicken, dann hier nochmal „Freigeben …“ und den neuen Eintrag einschalten.',
+              'This happens after updating the test version: select SlimVoice in the list, click “–” below, then click “Allow …” here again and switch on the new entry.',
+            )}
+          </li>
+        </ol>
       )}
-    </Row>
+    </div>
   );
 }
 
 // ------------------------------------------------------------------ Diktat
-function HoldKeyRow() {
-  const { s, set, snap } = useApp();
-  const L = useL();
-  const mac = snap.platform === 'darwin';
-  const names: Record<string, string> = {
-    CtrlRight: L('Rechte Strg-Taste', 'Right Ctrl'),
-    AltRight: mac ? L('Rechte ⌥-Taste', 'Right ⌥') : L('AltGr (nicht empfohlen für deutsche Tastatur)', 'AltGr / right Alt'),
-    ShiftRight: L('Rechte Umschalttaste', 'Right Shift'),
-    MetaRight: mac ? L('Rechte ⌘-Taste', 'Right ⌘') : L('Rechte Windows-Taste', 'Right Windows key'),
-    CapsLock: L('Feststelltaste', 'Caps Lock'),
-  };
-  const opts: [string, string][] = [
-    ['auto', `${L('Standard', 'Default')} (${mac ? names.MetaRight : names.CtrlRight})`],
-    ['', L('Aus', 'Off')],
-    ...snap.hold.keys.map((k) => [k, names[k] || k] as [string, string]),
-  ];
-  return (
-    <Row
-      label={L('Taste halten zum Sprechen', 'Hold a key to talk')}
-      hint={
-        <>
-          {L('Halten = sprechen, loslassen = fertig. Kurz tippen = freihändig, nochmal tippen = fertig.', 'Hold = talk, release = done. Quick tap = hands-free, tap again = done.')}
-          {mac && !snap.permissions.accessibility && <span className="error"> {L('Braucht die Freigabe „Bedienungshilfen“ (siehe Start).', 'Needs the Accessibility permission (see Start).')}</span>}
-        </>
-      }
-    >
-      <Select label={L('Taste halten zum Sprechen', 'Hold a key to talk')} value={s.hotkey.hold} onChange={(hold) => set({ hotkey: { hold } })} options={opts} />
-    </Row>
-  );
-}
-
-/** Mikrofon ausprobieren: Pegel live anzeigen */
-function MicTest({ micId }: { micId: string }) {
+/** Mikrofon ausprobieren: Pegel live anzeigen (aufgenommen wird in der App selbst) */
+function MicTest() {
   const L = useL();
   const [level, setLevel] = useState<number | null>(null);
   const [err, setErr] = useState('');
-  const stopRef = useRef<() => void>(() => {});
-  useEffect(() => () => stopRef.current(), []);
-  const start = async () => {
-    setErr('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: micId ? { deviceId: { exact: micId } } : true });
-      const ctx = new AudioContext();
-      const an = ctx.createAnalyser();
-      an.fftSize = 1024;
-      ctx.createMediaStreamSource(stream).connect(an);
-      const buf = new Float32Array(an.fftSize);
-      let raf = 0;
-      const loop = () => {
-        an.getFloatTimeDomainData(buf);
-        let sum = 0;
-        for (const v of buf) sum += v * v;
-        setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6));
-        raf = requestAnimationFrame(loop);
-      };
-      loop();
-      const timer = setTimeout(() => stopRef.current(), 15000);
-      stopRef.current = () => {
-        cancelAnimationFrame(raf);
-        clearTimeout(timer);
-        stream.getTracks().forEach((tr) => tr.stop());
-        ctx.close();
+  const timer = useRef<number | undefined>(undefined);
+  const stop = () => {
+    window.api.call('mic:test', 'stop');
+    clearTimeout(timer.current);
+    setLevel(null);
+  };
+  useEffect(() => {
+    const off = window.api.on('mic:level', (m: { level?: number; error?: string }) => {
+      if (m.error) {
+        setErr(m.error);
         setLevel(null);
-        stopRef.current = () => {};
-      };
-    } catch (e) {
-      setErr(String((e as Error)?.message || e));
-    }
+      } else if (m.level !== undefined) setLevel(m.level);
+    });
+    return () => {
+      off();
+      window.api.call('mic:test', 'stop');
+    };
+  }, []);
+  const start = () => {
+    setErr('');
+    setLevel(0);
+    window.api.call('mic:test', 'start');
+    timer.current = window.setTimeout(stop, 15000);
   };
   return (
     <Row label={L('Mikrofon testen', 'Test microphone')} hint={level !== null ? L('Sprich etwas – der Balken sollte deutlich ausschlagen.', 'Say something – the bar should move clearly.') : err || undefined}>
@@ -365,7 +351,7 @@ function MicTest({ micId }: { micId: string }) {
           <div className="meter" aria-label={L('Pegel', 'Level')}>
             <i style={{ width: `${Math.round(level * 100)}%` }} className={level > 0.85 ? 'loud' : level > 0.08 ? 'ok' : ''} />
           </div>
-          <button className="btn small" onClick={() => stopRef.current()}>
+          <button className="btn small" onClick={stop}>
             {L('Stopp', 'Stop')}
           </button>
         </div>
@@ -378,17 +364,11 @@ export function Dictation() {
   const { t, s, set, snap, lang } = useApp();
   const L = useL();
   const d = s.dictation;
-  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [mics, setMics] = useState<string[]>([]);
   useEffect(() => {
-    const load = () =>
-      navigator.mediaDevices
-        .enumerateDevices()
-        .then((list) => setMics(list.filter((x) => x.kind === 'audioinput' && x.deviceId !== 'default' && x.deviceId !== 'communications')))
-        .catch(() => {});
-    load();
-    navigator.mediaDevices.addEventListener('devicechange', load);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', load);
+    window.api.call<string[]>('mic:list').then(setMics).catch(() => {});
   }, []);
+  const expert = s.ui.mode === 'expert';
   const langName = (l: [string, string, string]) => (lang === 'de' ? l[1] : l[2]);
 
   return (
@@ -425,14 +405,15 @@ export function Dictation() {
       </Section>
 
       <Section title={t('dict.hotkey')} desc={t('dict.hotkey.d')}>
-        <HoldKeyRow />
-        <Row label={t('dict.hotkey.toggle')}>
+        <Row label={t('dict.hotkey.toggle')} hint={L('Halten = sprechen, loslassen = fertig. Kurz tippen = freihändig (du kannst nebenher tippen), nochmal drücken = fertig.', 'Hold = talk, release = done. Quick tap = hands-free (you can keep typing), press again = done.')}>
           <HotkeyInput label={t('dict.hotkey.toggle')} value={s.hotkey.toggle} onChange={(toggle) => set({ hotkey: { toggle } })} />
-          {!snap.hotkeys.toggle && <div className="hint error">{t('dict.hotkey.taken')}</div>}
+          {snap.hotkeys.toggle === false && <div className="hint error">{t('dict.hotkey.taken')}</div>}
         </Row>
-        <Row label={t('dict.hotkey.cancel')}>
-          <HotkeyInput allowEmpty label={t('dict.hotkey.cancel')} value={s.hotkey.cancel} onChange={(cancel) => set({ hotkey: { cancel } })} />
-        </Row>
+        {expert && (
+          <Row label={t('dict.hotkey.cancel')}>
+            <HotkeyInput allowEmpty label={t('dict.hotkey.cancel')} value={s.hotkey.cancel} onChange={(cancel) => set({ hotkey: { cancel } })} />
+          </Row>
+        )}
         <Row
           label={L('Befehlsmodus (markierten Text umschreiben)', 'Command mode (rewrite selected text)')}
           hint={L(
@@ -445,6 +426,7 @@ export function Dictation() {
         </Row>
       </Section>
 
+      {expert && (
       <Section title={t('dict.insert')} desc={t('dict.insert.d')}>
         <Row label={t('dict.insert')}>
           <Select
@@ -461,12 +443,15 @@ export function Dictation() {
         {d.insert === 'paste' && <Toggle label={t('dict.restore')} value={d.restoreClipboard} onChange={(restoreClipboard) => set({ dictation: { restoreClipboard } })} />}
         <Toggle label={t('dict.trailingSpace')} value={d.trailingSpace} onChange={(trailingSpace) => set({ dictation: { trailingSpace } })} />
       </Section>
+      )}
 
       <Section title={t('dict.recording')}>
-        <MicTest micId={d.micId} />
+        <MicTest />
         <Row label={t('dict.mic')}>
-          <Select label={t('dict.mic')} value={d.micId} onChange={(micId) => set({ dictation: { micId } })} options={[['', t('dict.mic.default')], ...mics.map((m, i) => [m.deviceId, m.label || `Mikrofon ${i + 1}`] as [string, string])]} />
+          <Select label={t('dict.mic')} value={d.micId} onChange={(micId) => set({ dictation: { micId } })} options={[['', t('dict.mic.default')], ...mics.map((m) => [m, m] as [string, string])]} />
         </Row>
+        {expert && (
+          <>
         <Row label={t('dict.sensitivity')} hint={t('dict.sensitivity.d')}>
           <input className="range" type="range" min={0} max={100} step={5} value={d.sensitivity} aria-label={t('dict.sensitivity')} onChange={(e) => set({ dictation: { sensitivity: +e.target.value } })} />
         </Row>
@@ -492,10 +477,26 @@ export function Dictation() {
             ]}
           />
         </Row>
-        <Toggle label={t('dict.processing')} value={d.audioProcessing} onChange={(audioProcessing) => set({ dictation: { audioProcessing } })} />
+          </>
+        )}
         <Toggle label={t('dict.sounds')} value={d.sounds} onChange={(sounds) => set({ dictation: { sounds } })} />
       </Section>
+      {!expert && <ExpertHint />}
     </div>
+  );
+}
+
+/** Hinweis im Einfach-Modus: es gibt mehr Einstellungen */
+export function ExpertHint() {
+  const { set } = useApp();
+  const L = useL();
+  return (
+    <p className="hint center">
+      {L('Mehr Einstellungen?', 'More settings?')}{' '}
+      <button className="link" onClick={() => set({ ui: { mode: 'expert' } })}>
+        {L('Expertenmodus einschalten', 'Switch on expert mode')}
+      </button>
+    </p>
   );
 }
 
@@ -510,8 +511,7 @@ export function Ai() {
     ['casual', t('ai.style.casual')],
     ['formal', t('ai.style.formal')],
   ];
-  const levelOpts: [Level, string][] = (['off', 'punct', 'light', 'strong'] as Level[]).map((l) => [l, t(`ai.level.${l}` as Key)]);
-  const updProfile = (i: number, p: Partial<Profile>) => set({ ai: { profiles: a.profiles.map((x, j) => (j === i ? { ...x, ...p } : x)) } });
+  const expert = s.ui.mode === 'expert';
 
   return (
     <div className="page">
@@ -528,70 +528,165 @@ export function Ai() {
         <Row label={t('ai.style')}>
           <Segmented label={t('ai.style')} value={a.style} onChange={(style) => set({ ai: { style } })} options={styleOpts} />
         </Row>
-        <Row label={t('ai.translate')}>
-          <Select label={t('ai.translate')} value={a.translateTo} onChange={(translateTo) => set({ ai: { translateTo } })} options={[['', t('ai.translate.none')], ...LANGUAGES.map((l) => [l[0], langLabel(l)] as [string, string])]} />
-        </Row>
         <Toggle label={t('ai.fillers')} value={a.removeFillers} onChange={(removeFillers) => set({ ai: { removeFillers } })} />
-        <Toggle label={t('ai.commands')} value={a.voiceCommands} onChange={(voiceCommands) => set({ ai: { voiceCommands } })} />
-        <Toggle label={t('ai.context')} value={a.useContext} onChange={(useContext) => set({ ai: { useContext } })} />
-        <Row label={t('ai.custom')} wide>
-          <TextField label={t('ai.custom')} value={a.customInstruction} placeholder={t('ai.custom.ph')} onCommit={(customInstruction) => set({ ai: { customInstruction } })} />
-        </Row>
+        {expert && (
+          <>
+            <Row label={t('ai.translate')}>
+              <Select label={t('ai.translate')} value={a.translateTo} onChange={(translateTo) => set({ ai: { translateTo } })} options={[['', t('ai.translate.none')], ...LANGUAGES.map((l) => [l[0], langLabel(l)] as [string, string])]} />
+            </Row>
+            <Toggle label={t('ai.commands')} value={a.voiceCommands} onChange={(voiceCommands) => set({ ai: { voiceCommands } })} />
+            <Toggle label={t('ai.context')} value={a.useContext} onChange={(useContext) => set({ ai: { useContext } })} />
+            <Row label={t('ai.custom')} wide>
+              <TextField label={t('ai.custom')} value={a.customInstruction} placeholder={t('ai.custom.ph')} onCommit={(customInstruction) => set({ ai: { customInstruction } })} />
+            </Row>
+          </>
+        )}
       </Section>
 
-      <Section title={t('ai.vocab')} desc={t('ai.vocab.d')}>
-        <TextField
-          multiline
-          label={t('ai.vocab')}
-          value={a.vocabulary.join('\n')}
-          placeholder={t('ai.vocab.ph')}
-          onCommit={(v) =>
-            set({
-              ai: {
-                vocabulary: v
-                  .split('\n')
-                  .map((x) => x.trim())
-                  .filter(Boolean),
-              },
-            })
-          }
-        />
-      </Section>
+      {!expert && <ExpertHint />}
+    </div>
+  );
+}
 
-      <Section title={t('ai.replace')} desc={t('ai.replace.d')}>
-        <div className="table">
-          {a.replacements.map((r, i) => (
-            <div className="table-row" key={i}>
-              <TextField label={t('ai.replace.from')} value={r.from} placeholder={t('ai.replace.from')} onCommit={(from) => set({ ai: { replacements: a.replacements.map((x, j) => (j === i ? { ...x, from } : x)) } })} />
-              <span className="arrow">→</span>
-              <TextField label={t('ai.replace.to')} value={r.to} placeholder={t('ai.replace.to')} onCommit={(to) => set({ ai: { replacements: a.replacements.map((x, j) => (j === i ? { ...x, to } : x)) } })} />
-              <button className="icon-btn" aria-label={t('hist.delete')} onClick={() => set({ ai: { replacements: a.replacements.filter((_, j) => j !== i) } })}>
-                ×
-              </button>
-            </div>
-          ))}
-          <button className="btn small" onClick={() => set({ ai: { replacements: [...a.replacements, { from: '', to: '' }] } })}>
-            +
+// ------------------------------------------------------------------ Wörter & Programme
+const lines = (v: string) =>
+  v
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+function ReplacementList({ items, onChange }: { items: { from: string; to: string }[]; onChange: (v: { from: string; to: string }[]) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="table">
+      {items.map((r, i) => (
+        <div className="table-row" key={i}>
+          <TextField label={t('ai.replace.from')} value={r.from} placeholder={t('ai.replace.from')} onCommit={(from) => onChange(items.map((x, j) => (j === i ? { ...x, from } : x)))} />
+          <span className="arrow">→</span>
+          <TextField label={t('ai.replace.to')} value={r.to} placeholder={t('ai.replace.to')} onCommit={(to) => onChange(items.map((x, j) => (j === i ? { ...x, to } : x)))} />
+          <button className="icon-btn" aria-label={t('hist.delete')} onClick={() => onChange(items.filter((_, j) => j !== i))}>
+            ×
           </button>
         </div>
+      ))}
+      <button className="btn small" onClick={() => onChange([...items, { from: '', to: '' }])}>
+        + {t('ai.replace')}
+      </button>
+    </div>
+  );
+}
+
+function ProfileCard({ p, onChange, onRemove }: { p: Profile; onChange: (p: Partial<Profile>) => void; onRemove: () => void }) {
+  const { t, s } = useApp();
+  const L = useL();
+  const [open, setOpen] = useState(!p.match);
+  const levelOpts: [string, string][] = [['inherit', `${L('Wie allgemein', 'As general')}`], ...(['off', 'punct', 'light', 'strong'] as Level[]).map((l) => [l, t(`ai.level.${l}` as Key)] as [string, string])];
+  const styleOpts: [string, string][] = [['inherit', L('Wie allgemein', 'As general')], ['neutral', t('ai.style.neutral')], ['casual', t('ai.style.casual')], ['formal', t('ai.style.formal')]];
+  const words = p.vocabulary?.length || 0;
+  const reps = p.replacements?.length || 0;
+  return (
+    <div className="profile">
+      <div className="profile-head">
+        <TextField label={t('ai.profiles.app')} value={p.match} placeholder={L('Name des Programms, z. B. Word', 'App name, e.g. Word')} list="seen-apps" onCommit={(match) => onChange({ match })} />
+        <span className="hint">
+          {words} {L('Wörter', 'words')} · {reps} {L('Ersetzungen', 'replacements')}
+        </span>
+        <button className="btn small" onClick={() => setOpen(!open)}>
+          {open ? L('Zuklappen', 'Collapse') : L('Bearbeiten', 'Edit')}
+        </button>
+        <button className="icon-btn" aria-label={t('hist.delete')} onClick={onRemove}>
+          ×
+        </button>
+      </div>
+      {open && (
+        <div className="profile-body">
+          <label className="field-label">{L('Fachbegriffe, Namen, Kürzel für dieses Programm – eins pro Zeile', 'Terms, names, abbreviations for this app – one per line')}</label>
+          <TextField multiline label={L('Wörter', 'Words')} value={(p.vocabulary || []).join('\n')} placeholder={L('z. B.\nIBAN\nRechnungsnummer\nDr. Özdemir', 'e.g.\nIBAN\ninvoice number\nDr. Smith')} onCommit={(v) => onChange({ vocabulary: lines(v) })} />
+          <label className="field-label">{L('Ersetzungen nur hier', 'Replacements only here')}</label>
+          <ReplacementList items={p.replacements || []} onChange={(replacements) => onChange({ replacements })} />
+          <div className="profile-grid">
+            <Row label={L('KI-Korrektur hier', 'AI correction here')}>
+              <Select label={t('ai.level')} value={p.level || 'inherit'} onChange={(level) => onChange({ level: level as Level })} options={levelOpts} />
+            </Row>
+            <Row label={t('ai.style')}>
+              <Select label={t('ai.style')} value={p.style || 'inherit'} onChange={(style) => onChange({ style })} options={styleOpts} />
+            </Row>
+          </div>
+          {s.ui.mode === 'expert' && (
+            <Row label={t('ai.custom')} wide>
+              <TextField label={t('ai.custom')} value={p.customInstruction || ''} placeholder={L('z. B. „Antworte immer mit Sie“', 'e.g. “Always use formal address”')} onCommit={(customInstruction) => onChange({ customInstruction })} />
+            </Row>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Words() {
+  const { t, s, set } = useApp();
+  const L = useL();
+  const a = s.ai;
+  const [detecting, setDetecting] = useState(false);
+  const upd = (i: number, p: Partial<Profile>) => set({ ai: { profiles: a.profiles.map((x, j) => (j === i ? { ...x, ...p } : x)) } });
+  const add = (match: string) => set({ ai: { profiles: [...a.profiles, { match, level: 'inherit', style: 'inherit', vocabulary: [], replacements: [] }] } });
+  return (
+    <div className="page">
+      <Section title={L('Meine Wörter (überall)', 'My words (everywhere)')} desc={L('Namen, Fachbegriffe und Kürzel, die oft falsch erkannt werden – eins pro Zeile. Die Erkennung bekommt sie als Hinweis.', 'Names, terms and abbreviations that are often misheard – one per line. Recognition gets them as a hint.')}>
+        <TextField multiline label={t('ai.vocab')} value={a.vocabulary.join('\n')} placeholder={t('ai.vocab.ph')} onCommit={(v) => set({ ai: { vocabulary: lines(v) } })} />
       </Section>
 
-      <Section title={t('ai.profiles')} desc={t('ai.profiles.d')}>
-        <div className="table">
+      <Section title={t('ai.replace')} desc={L('Was du sagst → was geschrieben wird. Immer, auch ohne KI. Z. B. „mfg“ → „Mit freundlichen Grüßen“.', 'What you say → what is written. Always, even without AI. E.g. “brb” → “be right back”.')}>
+        <ReplacementList items={a.replacements} onChange={(replacements) => set({ ai: { replacements } })} />
+      </Section>
+
+      <Section
+        title={L('Pro Programm', 'Per app')}
+        desc={L(
+          'Eigene Wörter, Ersetzungen und KI-Einstellungen für einzelne Programme – sie gelten nur, wenn du in diesem Programm diktierst (zusätzlich zu „Meine Wörter“).',
+          'Own words, replacements and AI settings for single apps – they apply only when you dictate in that app (in addition to “My words”).',
+        )}
+      >
+        <datalist id="seen-apps">
+          {(s.seenApps || []).map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        <div className="profiles">
           {a.profiles.map((p, i) => (
-            <div className="table-row" key={i}>
-              <TextField label={t('ai.profiles.app')} value={p.match} placeholder="outlook" onCommit={(match) => updProfile(i, { match })} />
-              <Select label={t('ai.level')} value={p.level || 'inherit'} onChange={(level) => updProfile(i, { level: level as Level })} options={[['inherit', `${t('ai.level')}: ${t('ai.inherit')}`], ...levelOpts]} />
-              <Select label={t('ai.style')} value={p.style || 'inherit'} onChange={(style) => updProfile(i, { style })} options={[['inherit', `${t('ai.style')}: ${t('ai.inherit')}`], ...styleOpts]} />
-              <button className="icon-btn" aria-label={t('hist.delete')} onClick={() => set({ ai: { profiles: a.profiles.filter((_, j) => j !== i) } })}>
-                ×
-              </button>
-            </div>
+            <ProfileCard key={i} p={p} onChange={(x) => upd(i, x)} onRemove={() => set({ ai: { profiles: a.profiles.filter((_, j) => j !== i) } })} />
           ))}
-          <button className="btn small" onClick={() => set({ ai: { profiles: [...a.profiles, { match: '', level: 'inherit', style: 'inherit' }] } })}>
-            +
+        </div>
+        <div className="actions left">
+          <button
+            className="btn primary"
+            disabled={detecting}
+            onClick={async () => {
+              setDetecting(true);
+              const name = await window.api.call<string>('app:detect');
+              setDetecting(false);
+              if (name) add(name);
+            }}
+          >
+            {detecting ? L('Wechsle jetzt in das Programm … (3 s)', 'Switch to the app now … (3 s)') : L('Programm erkennen', 'Detect app')}
+          </button>
+          <button className="btn" onClick={() => add('')}>
+            + {L('Von Hand hinzufügen', 'Add manually')}
           </button>
         </div>
+        {(s.seenApps || []).length > 0 && (
+          <p className="hint">
+            {L('Zuletzt benutzt:', 'Recently used:')}{' '}
+            {s.seenApps
+              .filter((n) => !a.profiles.some((p) => p.match && n.toLowerCase().includes(p.match.toLowerCase())))
+              .slice(0, 8)
+              .map((n) => (
+                <button key={n} className="chip" onClick={() => add(n)}>
+                  + {n}
+                </button>
+              ))}
+          </p>
+        )}
       </Section>
     </div>
   );
@@ -843,7 +938,7 @@ export function History() {
 
 // ------------------------------------------------------------------ Allgemein
 export function General() {
-  const { t, s, set, snap } = useApp();
+  const { t, s, set, snap, lang } = useApp();
   return (
     <div className="page">
       <Section>
@@ -872,6 +967,24 @@ export function General() {
           />
         </Row>
         {snap.platform !== 'linux' && <Toggle label={t('gen.autostart')} value={s.autostart} onChange={(autostart) => set({ autostart })} />}
+      </Section>
+      <Section title={lang === 'de' ? 'Über SlimVoice' : 'About SlimVoice'}>
+        <div className="about">
+          <img src={logo} alt="" width={64} height={64} />
+          <div>
+            <strong>SlimVoice {snap.version}</strong>
+            <p>{lang === 'de' ? 'Kostenlos, ohne Werbung, ohne Konto – von SlimBit Apps.' : 'Free, no ads, no account – by SlimBit Apps.'}</p>
+            <p>
+              <button className="link" onClick={() => window.api.call('shell:openExternal', snap.website)}>
+                slimbitapps.github.io
+              </button>{' '}
+              ·{' '}
+              <button className="link" onClick={() => window.api.call('shell:openExternal', `mailto:${snap.email}`)}>
+                {snap.email}
+              </button>
+            </p>
+          </div>
+        </div>
       </Section>
       <Section title={t('gen.privacy')}>
         <p className="card-text">{t('gen.privacy.d')}</p>

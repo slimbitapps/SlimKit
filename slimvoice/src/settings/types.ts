@@ -7,10 +7,15 @@ export interface Profile {
   level?: Level | 'inherit';
   style?: string;
   translateTo?: string;
+  vocabulary?: string[];
+  replacements?: { from: string; to: string }[];
+  customInstruction?: string;
 }
 export interface Settings {
   onboarded: boolean;
-  ui: { lang: '' | 'de' | 'en'; theme: 'system' | 'light' | 'dark' };
+  wizardStep: number;
+  seenApps: string[];
+  ui: { lang: '' | 'de' | 'en'; theme: 'system' | 'light' | 'dark'; mode: 'simple' | 'expert' };
   hotkey: { toggle: string; cancel: string; hold: string; command: string };
   dictation: {
     mode: Mode;
@@ -18,7 +23,6 @@ export interface Settings {
     language: string;
     pauseMs: number;
     sensitivity: number;
-    audioProcessing: boolean;
     micId: string;
     maxMinutes: number;
     sounds: boolean;
@@ -42,7 +46,7 @@ export interface Settings {
   services: {
     stt: { provider: string; model: string; fastModel: string; baseUrl: string };
     llm: { provider: string; model: string; baseUrl: string };
-    local: { model: LocalKey; device: 'auto' | 'gpu' | 'cpu'; ready: Partial<Record<LocalKey, boolean>>; keepLoadedMin: number };
+    local: { model: LocalKey; gpu: boolean; keepLoadedMin: number };
   };
   history: { keep: boolean; max: number };
   autostart: boolean;
@@ -62,11 +66,20 @@ export interface EngineStatus {
   progress: number;
   loaded: number;
   total: number;
-  device: string;
-  loadedModel: string;
 }
 export interface Snapshot {
-  local: { models: Record<LocalKey, { id: string; sizeMB: number; ramGB: number }>; status: EngineStatus; ramGB: number; cores: number };
+  local: {
+    models: Record<LocalKey, { sizeMB: number; ramGB: number }>;
+    downloaded: Partial<Record<LocalKey, number>>;
+    status: EngineStatus;
+    cores: number;
+    gpu: boolean;
+    appleSilicon: boolean;
+    loaded: { model: string; gpu: boolean } | null;
+  };
+  website: string;
+  email: string;
+  recording: boolean;
   settings: Settings;
   secrets: { keys: Record<string, { set: boolean; hint: string }>; encrypted: boolean };
   platform: string;
@@ -75,9 +88,7 @@ export interface Snapshot {
   stt: Record<string, ProviderInfo>;
   llm: Record<string, ProviderInfo>;
   hotkeys: { toggle: boolean; cancel: boolean; command?: boolean };
-  hold: { key: string; label: string; active: boolean; keys: string[] };
   permissions: { mic: string; accessibility: boolean };
-  dark: boolean;
 }
 export interface HistoryItem {
   id: string;
