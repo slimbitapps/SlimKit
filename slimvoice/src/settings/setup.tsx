@@ -211,7 +211,7 @@ export function LocalModels({ compact }: { compact?: boolean }) {
             <div className="row">
               <div className="row-label">
                 <div>{L('Grafikbeschleunigung (Metal)', 'Graphics acceleration (Metal)')}</div>
-                <div className="hint">{L('Schneller. Wird automatisch ausgeschaltet, falls der Selbsttest damit fehlschlägt.', 'Faster. Turned off automatically if the self-test fails with it.')}</div>
+                <div className="hint">{L('Meist nicht nötig – der Prozessor ist bei Diktaten schneller und leiser. Beim ersten Diktat bereitet die Grafik sich kurz vor (Lüfter).', 'Usually not needed – the processor is faster and quieter for dictation. The graphics need a moment to prepare on the first dictation (fan).')}</div>
               </div>
               <div className="row-control">
                 <button type="button" role="switch" aria-checked={local.gpu} aria-label="Metal" className={'switch' + (local.gpu ? ' on' : '')} onClick={() => set({ services: { local: { gpu: !local.gpu } } })}>

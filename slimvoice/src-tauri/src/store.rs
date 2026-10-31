@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 pub fn defaults() -> Value {
     json!({
-        "version": 3,
+        "version": 4,
         "onboarded": false,
         "wizardStep": 0,
         "ui": { "lang": "", "theme": "system", "mode": "simple" },
@@ -28,7 +28,7 @@ pub fn defaults() -> Value {
         "services": {
             "stt": { "provider": "local", "model": "", "fastModel": "", "baseUrl": "" },
             "llm": { "provider": "auto", "model": "", "baseUrl": "" },
-            "local": { "model": "small", "ready": {}, "keepLoadedMin": 15, "gpu": true }
+            "local": { "model": "small", "ready": {}, "keepLoadedMin": 15, "gpu": false }
         },
         "history": { "keep": true, "max": 200 },
         "autostart": false,
@@ -79,10 +79,16 @@ pub struct Settings {
 impl Settings {
     pub fn load(path: PathBuf) -> Self {
         let saved = read_json(&path).unwrap_or(Value::Null);
-        Self {
-            data: merge(&defaults(), &saved),
-            path,
+        let mut data = merge(&defaults(), &saved);
+        // Version 4: lokal standardmäßig auf dem Prozessor rechnen (Metal-Grafik war beim Start langsam + laut)
+        if saved.get("version").and_then(|v| v.as_u64()).unwrap_or(0) < 4 {
+            data["services"]["local"]["gpu"] = Value::Bool(false);
+            data["version"] = Value::from(4);
+            if data["services"]["local"]["model"] == "turbo" {
+                data["services"]["local"]["model"] = Value::from("small");
+            }
         }
+        Self { data, path }
     }
     pub fn update(&mut self, partial: &Value) {
         self.data = merge(&self.data, partial);
