@@ -38,6 +38,18 @@ impl Inserter {
     fn shortcut(c: char) -> Result<(), String> {
         let mut e = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
         e.key(MOD, Direction::Press).map_err(|e| e.to_string())?;
+        // Mac: feste Tasten-Nummern statt Buchstaben. Für Buchstaben fragt macOS das Tastatur-Layout ab –
+        // das darf nur der Haupt-Thread und hat die App beim Einfügen abstürzen lassen.
+        #[cfg(target_os = "macos")]
+        let r = {
+            let code: u16 = match c {
+                'v' => 9,
+                'c' => 8,
+                _ => return Err("unsupported shortcut".into()),
+            };
+            e.raw(code, Direction::Click).map_err(|e| e.to_string())
+        };
+        #[cfg(not(target_os = "macos"))]
         let r = e
             .key(Key::Unicode(c), Direction::Click)
             .map_err(|e| e.to_string());

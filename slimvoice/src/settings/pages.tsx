@@ -378,11 +378,18 @@ export function Dictation() {
           value={d.mode}
           onChange={(mode) => set({ dictation: { mode } })}
           options={[
+            ['stream', t('dict.mode.stream'), t('dict.mode.stream.d')],
             ['live', t('dict.mode.live'), t('dict.mode.live.d')],
             ['preview', t('dict.mode.preview'), t('dict.mode.preview.d')],
             ['batch', t('dict.mode.batch'), t('dict.mode.batch.d')],
           ]}
         />
+        {s.services.stt.provider !== 'local' && d.mode === 'stream' && (
+          <p className="hint">{L('„Wort für Wort“ geht nur mit der Erkennung auf deinem Computer. Mit einem Online-Dienst wird stattdessen jeder Satz nach einer Sprechpause eingefügt.', '“Word by word” only works with recognition on your computer. With an online service, each sentence is inserted after a pause instead.')}</p>
+        )}
+        {d.mode === 'stream' && d.insert === 'copy' && (
+          <p className="hint">{L('„Wort für Wort“ braucht „Einfügen“ oder „Eintippen“ (nicht „Nur kopieren“).', '“Word by word” needs “Paste” or “Type” (not “Copy only”).')}</p>
+        )}
         {s.services.stt.provider === 'local' && d.mode === 'preview' && (
           <p className="hint">{L('Bei der Erkennung auf deinem Computer wird – damit er ruhig bleibt – erst am Ende in einem Durchgang umgewandelt (ohne Live-Vorschau).', 'With recognition on your computer, the text is converted once at the end – to keep it quiet (no live preview).')}</p>
         )}

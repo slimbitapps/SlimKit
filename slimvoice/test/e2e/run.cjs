@@ -315,6 +315,22 @@ function startServer() {
         await waitFor(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').length > 0, 60000, 'App 2 startet');
         base = `http://127.0.0.1:${fs.readFileSync(portFile, 'utf8')}`;
         await waitFor(() => /setup: ready/.test(appLog), 60000, 'App 2 bereit');
+        // „Wort für Wort“: Text muss schon WÄHREND der Aufnahme erscheinen
+        {
+          fs.writeFileSync(out, '');
+          await dispatch('settings:set', { dictation: { mode: 'stream' } });
+          const t0 = Date.now();
+          await ctl('/toggle');
+          await waitFor(() => readOut().trim().split(/\s+/).length >= 2, 20000, 'Wort für Wort: Text während der Aufnahme');
+          const first = (Date.now() - t0) / 1000;
+          const during = readOut().trim();
+          await ctl('/toggle');
+          await sleep(3000);
+          console.log(`  lokal (stream): erste Wörter nach ${first.toFixed(1)} s während der Aufnahme: „${during}“ → am Ende „${readOut().trim()}“`);
+          assert.match(readOut(), /hello|test|dictation|works/i);
+          assert.ok(readOut().startsWith(during), 'schon Getipptes darf nicht verändert werden');
+          await sleep(1500);
+        }
         for (const mode of ['preview', 'live']) {
           fs.writeFileSync(out, '');
           await dispatch('settings:set', { dictation: { mode } });
@@ -329,7 +345,7 @@ function startServer() {
           assert.ok(secs < 20, `lokales Diktat zu langsam: ${secs} s`);
           await sleep(1500);
         }
-        console.log('✓ Echtes lokales Diktat (Vorschau + Sofort), schnell genug');
+        console.log('✓ Echtes lokales Diktat (Wort für Wort + Vorschau + Sofort), schnell genug');
       } finally {
         app2.kill();
       }

@@ -9,6 +9,7 @@ pub mod local;
 pub mod prompts;
 pub mod providers;
 pub mod session;
+pub mod stream;
 pub mod store;
 pub mod text;
 pub mod vad;
@@ -384,6 +385,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         "mode",
         &cfg.s("/dictation/mode"),
         &[
+            ("stream", "Wort für Wort", "Word by word"),
             ("live", "Sofort einfügen", "Insert right away"),
             ("preview", "Live-Vorschau", "Live preview"),
             ("batch", "Erst aufnehmen", "Record first"),
@@ -607,9 +609,22 @@ pub struct StartOpts {
 
 /// Lokal rechnet SlimVoice nur einmal am Ende (oder bei „Sofort einfügen“ pro Satz) – Vorschau-Schnipsel
 /// würden den Rechner unnötig auslasten.
+/// „Wort für Wort“ braucht lokale Erkennung und das Eintippen per Tastatur; sonst nächstbester Modus.
 fn effective_mode(cfg: &Value, stt_provider: &str, command: bool) -> String {
     let mode = cfg.s("/dictation/mode");
-    if command || (stt_provider == "local" && mode != "live") {
+    let local = stt_provider == "local";
+    let can_type = cfg.s("/dictation/insert") != "copy" && accessibility_ok();
+    if command {
+        "batch".into()
+    } else if mode == "stream" {
+        if !local {
+            "live".into()
+        } else if can_type {
+            "stream".into()
+        } else {
+            "batch".into()
+        }
+    } else if local && mode != "live" {
         "batch".into()
     } else {
         mode
@@ -725,12 +740,14 @@ pub fn start_dictation(o: StartOpts) {
             _ => 750,
         }
     };
+    let streaming = effective_mode(&cfg, &res.stt_provider, o.command) == "stream";
     let recorder = audio::Recorder::start(
         audio::RecOpts {
             device: cfg.s("/dictation/micId"),
             pause_ms: pause,
             sensitivity: cfg.n("/dictation/sensitivity") as u32,
             vad: true,
+            stream: streaming,
         },
         tx,
     );
@@ -811,11 +828,36 @@ pub fn start_dictation(o: StartOpts) {
             r.app_name = app_name;
         }
         // Audio-Ereignisse weiterreichen (Pegel → Anzeige, Abschnitte → Diktat)
+        let stream_cfg = cfg.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let mut idx = 0;
             let mut errored = false;
+            // „Wort für Wort“: eigener Rechen-Thread, damit Pegel-Anzeige und Aufnahme nie warten
+            let (stx, worker) = if streaming {
+                let (stx, srx) = std::sync::mpsc::channel::<audio::AudioMsg>();
+                let s2 = sess.clone();
+                let c2 = stream_cfg.clone();
+                (Some(stx), Some(std::thread::spawn(move || stream_worker(s2, c2, srx))))
+            } else {
+                (None, None)
+            };
             while let Ok(msg) = rx.recv() {
+                if let Some(stx) = &stx {
+                    match msg {
+                        audio::AudioMsg::Start(_) | audio::AudioMsg::Frame(_) | audio::AudioMsg::Discard => {
+                            let _ = stx.send(msg);
+                            continue;
+                        }
+                        audio::AudioMsg::Segment(pcm) => {
+                            idx += 1;
+                            let _ = stx.send(audio::AudioMsg::Segment(pcm));
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
                 match msg {
+                    audio::AudioMsg::Start(_) | audio::AudioMsg::Frame(_) | audio::AudioMsg::Discard => {}
                     audio::AudioMsg::Level { level, speaking } => {
                         let _ = st().handle.emit_to(
                             "overlay",
@@ -837,6 +879,11 @@ pub fn start_dictation(o: StartOpts) {
                     audio::AudioMsg::Ended => break,
                 }
             }
+            // Rest des letzten Satzes noch fertig erkennen + eintippen
+            drop(stx);
+            if let Some(w) = worker {
+                let _ = w.join();
+            }
             if errored && idx == 0 {
                 let mut r = st().rec.lock().unwrap();
                 if r.id == id {
@@ -854,6 +901,108 @@ pub fn start_dictation(o: StartOpts) {
             stop_dictation();
         }
     });
+}
+
+/// „Wort für Wort“: erkennt laufend, tippt sichere Wörter sofort ein, am Satzende den Rest
+fn stream_worker(sess: Arc<session::Session>, cfg: Value, rx: std::sync::mpsc::Receiver<audio::AudioMsg>) {
+    let eng = st().engine.clone();
+    let key = sess.models.stt_main.clone();
+    let gpu = cfg.b("/services/local/gpu");
+    let lang = {
+        let l = sess.cfg.language.clone();
+        if l.is_empty() { "auto".to_string() } else { l }
+    };
+    let thorough_beam = cfg.s("/dictation/tempo") != "fast";
+    let mut streamer = stream::Streamer::new(sess.cfg.ai.remove_fillers, sess.cfg.ai.replacements.clone());
+    let s_rec = sess.clone();
+    let mut rec = move |pcm: &[i16], thorough: bool, ctx: &str| -> Result<String, String> {
+        if s_rec.cancelled.load(Ordering::SeqCst) {
+            return Err("cancelled".into());
+        }
+        let hint = s_rec.stt_hint(ctx);
+        match eng.transcribe(&key, gpu, pcm, &lang, &hint, thorough && thorough_beam) {
+            Ok(t) => Ok(t.text),
+            Err(e) => {
+                log(format!("stream: {} {}", e.code, e.message));
+                if thorough {
+                    overlay_event(json!({ "id": s_rec.id, "type": "error", "code": e.code, "message": e.message }));
+                }
+                Err(e.code)
+            }
+        }
+    };
+    // Solange das Kürzel gedrückt gehalten wird, warten (sonst würden ⌥/Strg die Buchstaben verändern)
+    let mut pending = String::new();
+    let s_ty = sess.clone();
+    let flush = move |pending: &mut String, force: bool| {
+        if pending.is_empty() || s_ty.cancelled.load(Ordering::SeqCst) {
+            pending.clear();
+            return;
+        }
+        if !force && st().hold.lock().unwrap().is_down() {
+            return;
+        }
+        let text = std::mem::take(pending);
+        if let Err(e) = st().inserter.insert(&text, "type", false) {
+            log(format!("stream insert: {e}"));
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                let _ = cb.set_text(text);
+            }
+            overlay_event(json!({ "id": s_ty.id, "type": "warning", "code": "insert_failed" }));
+        }
+    };
+    let s_note = sess.clone();
+    let handle = |m: audio::AudioMsg, streamer: &mut stream::Streamer, pending: &mut String, tick: &mut bool, rec: &mut stream::Recognize| {
+        let mut ty = |piece: &str| {
+            s_note.note_inserted(piece);
+            *st().last_text.lock().unwrap() = s_note.inserted().trim().to_string();
+            pending.push_str(piece);
+        };
+        match m {
+            audio::AudioMsg::Start(p) => {
+                streamer.on_start(p);
+                *tick = false;
+            }
+            audio::AudioMsg::Frame(p) => {
+                streamer.push(&p);
+                *tick = true;
+            }
+            audio::AudioMsg::Segment(p) => {
+                streamer.on_segment(&p, rec, &mut ty);
+                *tick = false;
+            }
+            audio::AudioMsg::Discard => {
+                streamer.on_discard();
+                *tick = false;
+            }
+            _ => {}
+        }
+    };
+    while let Ok(first) = rx.recv() {
+        // alles, was inzwischen angekommen ist, auf einmal verarbeiten (nie hinterherhinken)
+        let mut tick = false;
+        handle(first, &mut streamer, &mut pending, &mut tick, &mut rec);
+        while let Ok(m) = rx.try_recv() {
+            handle(m, &mut streamer, &mut pending, &mut tick, &mut rec);
+        }
+        if tick {
+            let mut ty = |piece: &str| {
+                sess.note_inserted(piece);
+                *st().last_text.lock().unwrap() = sess.inserted().trim().to_string();
+                pending.push_str(piece);
+            };
+            streamer.tick(&mut rec, &mut ty);
+        }
+        flush(&mut pending, false);
+    }
+    // Aufnahme ist zu Ende: kurz warten, bis die Finger vom Kürzel sind, dann den Rest tippen
+    std::thread::sleep(Duration::from_millis(120));
+    let all = sess.inserted();
+    if sess.cfg.trailing_space && !all.trim().is_empty() && !all.ends_with(char::is_whitespace) {
+        sess.note_inserted(" ");
+        pending.push(' ');
+    }
+    flush(&mut pending, true);
 }
 
 fn make_deps(
@@ -1446,7 +1595,7 @@ pub async fn dispatch(ch: &str, args: &[Value]) -> Result<Value, String> {
                         device: dev,
                         pause_ms: 800,
                         sensitivity: 50,
-                        vad: false,
+                        vad: false, stream: false,
                     },
                     tx,
                 ));

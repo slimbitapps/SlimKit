@@ -15,6 +15,10 @@ pub enum AudioMsg {
         speaking: bool,
     },
     Segment(Vec<i16>),
+    /// „Wort für Wort“: Sprechen beginnt / läuft / verworfen
+    Start(Vec<i16>),
+    Frame(Vec<i16>),
+    Discard,
     Error(String),
     /// Aufnahme ist sauber beendet (alle Abschnitte sind raus)
     Ended,
@@ -26,6 +30,8 @@ pub struct RecOpts {
     pub sensitivity: u32,
     /// false = nur Pegel (Mikrofontest)
     pub vad: bool,
+    /// Audio während des Sprechens laufend liefern („Wort für Wort“)
+    pub stream: bool,
 }
 
 pub struct Recorder {
@@ -78,9 +84,11 @@ struct Pipeline {
 
 impl Pipeline {
     fn new(rate: u32, o: &RecOpts) -> Self {
+        let mut seg = Segmenter::new(o.pause_ms, o.sensitivity);
+        seg.stream = o.stream;
         Self {
             resampler: Resampler::new(rate),
-            seg: Segmenter::new(o.pause_ms, o.sensitivity),
+            seg,
             vad: o.vad,
             level_buf: Vec::new(),
             events: Vec::new(),
@@ -108,6 +116,9 @@ impl Pipeline {
             let _ = tx.send(match e {
                 VadEvent::Level { level, speaking } => AudioMsg::Level { level, speaking },
                 VadEvent::Segment(p) => AudioMsg::Segment(p),
+                VadEvent::Start(p) => AudioMsg::Start(p),
+                VadEvent::Frame(p) => AudioMsg::Frame(p),
+                VadEvent::Discard => AudioMsg::Discard,
             });
         }
     }

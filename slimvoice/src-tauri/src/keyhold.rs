@@ -64,6 +64,11 @@ impl KeyHold {
         Action::Stop
     }
 
+    /// Tasten des Kürzels gerade gedrückt?
+    pub fn is_down(&self) -> bool {
+        self.down
+    }
+
     pub fn is_hands_free(&self) -> bool {
         self.hands_free
     }

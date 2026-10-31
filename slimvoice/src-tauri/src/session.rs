@@ -227,6 +227,23 @@ impl Session {
         }
     }
 
+    /// „Wort für Wort“: ein bereits eingetipptes Stück merken (für Vorschau + Verlauf)
+    pub fn note_inserted(&self, piece: &str) {
+        let mut g = self.inner.lock().unwrap();
+        g.inserted.push_str(piece);
+        (self.deps.emit)(json!({ "type": "preview", "text": g.inserted.trim() }));
+    }
+
+    /// Bisher eingefügter Text (Zusammenhang für die Erkennung)
+    pub fn inserted(&self) -> String {
+        self.inner.lock().unwrap().inserted.clone()
+    }
+
+    /// Erkennungs-Hinweis (Fachwörter + Zusammenhang)
+    pub fn stt_hint(&self, context: &str) -> String {
+        self.prompt(context)
+    }
+
     pub fn add_segment(self: &Arc<Self>, idx: usize, pcm: Vec<i16>) {
         if self.is_cancelled() {
             return;
@@ -347,7 +364,7 @@ impl Session {
 
     /// Aufnahme ist beendet: Rest erledigen. Gibt den eingefügten Text zurück.
     pub async fn finish(self: &Arc<Self>) -> Result<Outcome, SvError> {
-        if self.cfg.mode == "live" {
+        if self.cfg.mode == "live" || self.cfg.mode == "stream" {
             self.wait_pending().await;
             let t = self.inner.lock().unwrap().inserted.trim().to_string();
             return Ok(Outcome {

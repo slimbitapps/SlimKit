@@ -31,6 +31,8 @@ const de = {
   'perm.ok': 'Freigegeben',
 
   'dict.mode': 'Modus',
+  'dict.mode.stream': 'Wort für Wort',
+  'dict.mode.stream.d': 'Die Wörter erscheinen schon während du sprichst. Du kannst den Text sofort weiterbearbeiten.',
   'dict.mode.live': 'Sofort einfügen',
   'dict.mode.live.d': 'Nach jeder Sprechpause wird der Satz eingefügt. Am schnellsten.',
   'dict.mode.preview': 'Live-Vorschau',
@@ -195,6 +197,8 @@ const en: Record<keyof typeof de, string> = {
   'perm.ok': 'Allowed',
 
   'dict.mode': 'Mode',
+  'dict.mode.stream': 'Word by word',
+  'dict.mode.stream.d': 'Words appear while you are still speaking. You can keep editing the text right away.',
   'dict.mode.live': 'Insert right away',
   'dict.mode.live.d': 'Each sentence is inserted after you pause. Fastest.',
   'dict.mode.preview': 'Live preview',

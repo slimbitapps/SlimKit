@@ -4,9 +4,16 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
+/// Sprache des Systems („de“/„en“ …) – genauer und schneller als „automatisch erkennen“
+pub fn system_language() -> String {
+    let l = sys_locale::get_locale().unwrap_or_default().to_lowercase();
+    let code: String = l.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+    if code.len() == 2 { code } else { "auto".into() }
+}
+
 pub fn defaults() -> Value {
     json!({
-        "version": 4,
+        "version": 5,
         "onboarded": false,
         "wizardStep": 0,
         "ui": { "lang": "", "theme": "system", "mode": "simple" },
@@ -17,7 +24,7 @@ pub fn defaults() -> Value {
             "command": if cfg!(target_os = "macos") { "Alt+Shift+Space" } else { "Alt+Shift+Space" }
         },
         "dictation": {
-            "mode": "preview", "tempo": "balanced", "language": "auto", "pauseMs": 0, "sensitivity": 50,
+            "mode": "stream", "tempo": "balanced", "language": system_language(), "pauseMs": 0, "sensitivity": 50,
             "micId": "", "maxMinutes": 15, "sounds": true, "overlay": "bottom",
             "insert": "paste", "restoreClipboard": true, "trailingSpace": true
         },
@@ -86,6 +93,17 @@ impl Settings {
             data["version"] = Value::from(4);
             if data["services"]["local"]["model"] == "turbo" {
                 data["services"]["local"]["model"] = Value::from("small");
+            }
+        }
+        // Version 5: neuer Modus „Wort für Wort“ als Standard, feste Sprache statt „automatisch“
+        if saved.get("version").and_then(|v| v.as_u64()).unwrap_or(0) < 5 {
+            data["version"] = Value::from(5);
+            // nur bei echten älteren Einstellungen (mit Versionsnummer) – der alte Standard war „Live-Vorschau“
+            if saved.get("version").is_some() && saved.pointer("/dictation/mode").is_some() {
+                data["dictation"]["mode"] = Value::from("stream");
+            }
+            if data["dictation"]["language"] == "auto" {
+                data["dictation"]["language"] = Value::from(system_language());
             }
         }
         Self { data, path }

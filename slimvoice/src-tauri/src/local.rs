@@ -238,8 +238,11 @@ impl Engine {
         // Höchstens so viele Wörter, wie man in der Zeit sprechen kann (≈ 3 Wörter/s, ≈ 2 Token/Wort)
         p.set_max_tokens(((secs * 8.0) as i32 + 24).clamp(32, 448));
         p.set_no_speech_thold(0.6);
-        if !prompt.is_empty() {
-            p.set_initial_prompt(prompt);
+        // Ohne Vorgabe schreibt Whisper oft ohne Satzzeichen – ein kurzer Beispielsatz zeigt die Schreibweise
+        let seed = if prompt.is_empty() { punctuation_hint(lang) } else { "" };
+        let hint = if prompt.is_empty() { seed } else { prompt };
+        if !hint.is_empty() {
+            p.set_initial_prompt(hint);
         }
         // Harte Zeitgrenze: lieber abbrechen und Bescheid sagen als den Rechner minutenlang blockieren
         let limit = std::time::Duration::from_secs_f32((secs * 6.0).max(25.0));
@@ -270,8 +273,25 @@ impl Engine {
                 }
             }
         }
-        Ok(Transcript { text: collapse_repeats(text.trim()), ms: t0.elapsed().as_millis(), gpu: *used_gpu })
+        let mut text = collapse_repeats(text.trim());
+        // Beispielsatz nur „nachgeplappert“ (passiert bei Stille) → nichts
+        if !seed.is_empty() && norm_cmp(&text) == norm_cmp(seed) {
+            text.clear();
+        }
+        Ok(Transcript { text, ms: t0.elapsed().as_millis(), gpu: *used_gpu })
     }
+}
+
+fn punctuation_hint(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Hallo, wie geht es dir? Mir geht es gut. Danke!",
+        "en" => "Hello, how are you? I'm fine. Thanks!",
+        _ => "",
+    }
+}
+
+fn norm_cmp(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
 }
 
 /// Endlosschleifen entfernen („Das ist das erste Mal. Das ist das erste Mal. …“ → einmal)

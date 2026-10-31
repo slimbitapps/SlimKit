@@ -15,6 +15,16 @@ const MIN_SEGMENT_RMS: f32 = 0.004;
 pub enum VadEvent {
     Level { level: f32, speaking: bool },
     Segment(Vec<i16>),
+    /// Nur im „Wort für Wort“-Modus: Sprechen beginnt (inkl. Vorlauf) …
+    Start(Vec<i16>),
+    /// … laufendes Audio während des Sprechens …
+    Frame(Vec<i16>),
+    /// … Abschnitt verworfen (zu kurz / nur Rauschen)
+    Discard,
+}
+
+fn to_i16(f: &[f32]) -> Vec<i16> {
+    f.iter().map(|v| (v.clamp(-1.0, 1.0) * 32767.0) as i16).collect()
 }
 
 pub struct Segmenter {
@@ -29,6 +39,8 @@ pub struct Segmenter {
     buf: Vec<f32>,
     level_every: usize,
     frames: usize,
+    /// Audio während des Sprechens laufend ausgeben (für „Wort für Wort“)
+    pub stream: bool,
 }
 
 impl Segmenter {
@@ -46,6 +58,7 @@ impl Segmenter {
             buf: Vec::with_capacity(FRAME * 2),
             level_every: 2,
             frames: 0,
+            stream: false,
         }
     }
 
@@ -94,10 +107,17 @@ impl Segmenter {
                 self.seg = Some(std::mem::take(&mut self.preroll));
                 self.voiced = 3;
                 self.silent = 0;
+                if self.stream {
+                    let pre: Vec<f32> = self.seg.as_ref().unwrap().iter().flatten().copied().collect();
+                    out.push(VadEvent::Start(to_i16(&pre)));
+                }
             }
             return;
         }
         let seg = self.seg.as_mut().unwrap();
+        if self.stream {
+            out.push(VadEvent::Frame(to_i16(&f)));
+        }
         seg.push(f);
         if loud {
             self.voiced += 1;
@@ -122,11 +142,17 @@ impl Segmenter {
         let keep = seg.len().saturating_sub(drop);
         self.silent = 0;
         if self.voiced as f32 * FRAME_MS < MIN_VOICED_MS {
+            if self.stream {
+                out.push(VadEvent::Discard);
+            }
             return;
         }
         let samples: Vec<f32> = seg[..keep].iter().flatten().copied().collect();
         let rms = (samples.iter().map(|v| v * v).sum::<f32>() / samples.len().max(1) as f32).sqrt();
         if rms < MIN_SEGMENT_RMS {
+            if self.stream {
+                out.push(VadEvent::Discard);
+            }
             return;
         }
         let pcm = samples

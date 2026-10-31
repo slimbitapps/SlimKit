@@ -1,4 +1,4 @@
-export type Mode = 'live' | 'preview' | 'batch';
+export type Mode = 'stream' | 'live' | 'preview' | 'batch';
 export type Tempo = 'fast' | 'balanced' | 'best';
 export type Level = 'off' | 'punct' | 'light' | 'strong';
 
