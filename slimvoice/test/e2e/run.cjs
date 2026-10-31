@@ -324,8 +324,11 @@ function startServer() {
           await waitFor(() => readOut().trim().split(/\s+/).length >= 2, 20000, 'Wort für Wort: Text während der Aufnahme');
           const first = (Date.now() - t0) / 1000;
           const during = readOut().trim();
+          const tStop = Date.now();
           await ctl('/toggle');
-          await sleep(3000);
+          await waitFor(() => /works fine/i.test(readOut()), 30000, 'Wort für Wort: letzter Satz nach „Fertig“');
+          console.log(`  lokal (stream): Rest ${((Date.now() - tStop) / 1000).toFixed(1)} s nach „Fertig“`);
+          await sleep(1000);
           console.log(`  lokal (stream): erste Wörter nach ${first.toFixed(1)} s während der Aufnahme: „${during}“ → am Ende „${readOut().trim()}“`);
           const alog = path.join(userData, 'app.log');
           if (fs.existsSync(alog)) console.log(fs.readFileSync(alog, 'utf8').split('\n').filter((l) => /stream/.test(l)).join('\n'));
